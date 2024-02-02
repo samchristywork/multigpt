@@ -3,12 +3,21 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
+
+type question struct {
+	question string
+	answer   string
+	tokens   float64
+}
 
 func calculateCost(tokens float64) float64 {
 	tokensPerDollar := 28476.0
@@ -97,4 +106,33 @@ func readLines(path string) ([]string, error) {
 		lines = append(lines, scanner.Text())
 	}
 	return lines, scanner.Err()
+}
+
+func main() {
+	role := flag.String("role", "You are a helpful assistant.", "Role of the AI.")
+	input_file := flag.String("input", "input.txt", "Input file.")
+
+	flag.Parse()
+
+	datetime := getDateTime()
+	log_filename := "log_" + datetime + ".txt"
+	log_file, err := os.Create(log_filename)
+	if err != nil {
+		fmt.Println("Error: ", err)
+		return
+	}
+
+	defer log_file.Close()
+
+	fmt.Fprintln(log_file, "Role:", *role)
+	fmt.Println("Role:", *role)
+
+	fmt.Println("Input file:", *input_file)
+	fmt.Println("Output file:", log_filename)
+
+	lines, err := readLines(*input_file)
+	if err != nil {
+		fmt.Println("Error: ", err)
+		return
+	}
 }
