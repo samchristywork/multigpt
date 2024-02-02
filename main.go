@@ -135,4 +135,35 @@ func main() {
 		fmt.Println("Error: ", err)
 		return
 	}
+
+	var questions []question
+	for _, line := range lines {
+		line = strings.ReplaceAll(line, "\t", " ")
+		question := question{question: line, answer: "", tokens: 0}
+		questions = append(questions, question)
+	}
+
+	var wg sync.WaitGroup
+	for n := range questions {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			questions[n].answer, questions[n].tokens = ask(*role, questions[n].question)
+		}(n)
+	}
+	wg.Wait()
+
+	for _, q := range questions {
+		fmt.Fprintln(log_file, q.question+"	"+q.answer)
+		fmt.Println(q.question + "	" + q.answer)
+	}
+
+	tokens := 0.0
+	for _, q := range questions {
+		tokens += q.tokens
+	}
+
+	cost := calculateCost(tokens)
+	fmt.Fprintln(log_file, "Total cost: ", cost, " USD")
+	fmt.Println("Total cost: ", cost, " USD")
 }
