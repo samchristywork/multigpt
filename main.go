@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -13,84 +14,71 @@ import (
 	"time"
 )
 
+const ollamaURL = "http://192.168.0.15:11434"
+
 type question struct {
 	question string
 	answer   string
-	tokens   float64
+	tokens   int
+	duration time.Duration
 }
 
-func calculateCost(tokens float64) float64 {
-	tokensPerDollar := 28476.0
-	return tokens / tokensPerDollar
+type ollamaResponse struct {
+	Response        string `json:"response"`
+	EvalCount       int    `json:"eval_count"`
+	PromptEvalCount int    `json:"prompt_eval_count"`
+	TotalDuration   int64  `json:"total_duration"`
+	Done            bool   `json:"done"`
 }
 
 func getDateTime() string {
-	currentTime := time.Now()
-	return currentTime.Format("2006-01-02 15:04:05")
+	return time.Now().Format("2006-01-02 15:04:05")
 }
 
-func getKey() string {
-	filename := ".env"
-	file, err := os.Open(filename)
-	if err != nil {
-		fmt.Println("Error: ", err)
-		os.Exit(1)
+func ask(model string, think bool, system string, query string) (string, int, time.Duration) {
+	type payload struct {
+		Model  string `json:"model"`
+		Prompt string `json:"prompt"`
+		System string `json:"system"`
+		Stream bool   `json:"stream"`
+		Think  bool   `json:"think"`
 	}
 
-	defer file.Close()
-
-	var key string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		key = scanner.Text()
-	}
-
-	return key
-}
-
-func ask(role string, query string) (string, float64) {
-	api_key := getKey()
-	url := "https://api.openai.com/v1/chat/completions"
-	method := "POST"
-	headers := map[string]string{
-		"Authorization": "Bearer " + api_key,
-		"Content-Type":  "application/json",
-	}
-
-	payload := fmt.Sprintf("{\"model\": \"gpt-4\", \"messages\": [{\"role\": \"system\", \"content\": \"%s\"}, {\"role\": \"user\", \"content\": \"%s\"}]}", role, query)
-
-	client := &http.Client{}
-	req, err := http.NewRequest(method, url, strings.NewReader(payload))
+	data, err := json.Marshal(payload{
+		Model:  model,
+		Prompt: query,
+		System: system,
+		Stream: false,
+		Think:  think,
+	})
 	if err != nil {
 		fmt.Println(err)
-		return "error", 0
+		return "error", 0, 0
 	}
 
-	for key, value := range headers {
-		req.Header.Set(key, value)
-	}
-
-	res, err := client.Do(req)
+	start := time.Now()
+	resp, err := http.Post(ollamaURL+"/api/generate", "application/json", bytes.NewReader(data))
 	if err != nil {
 		fmt.Println(err)
-		return "error", 0
+		return "error", 0, 0
 	}
+	defer resp.Body.Close()
 
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
+	body, err := io.ReadAll(resp.Body)
+	elapsed := time.Since(start)
 	if err != nil {
 		fmt.Println(err)
-		return "error", 0
+		return "error", 0, elapsed
 	}
 
-	var result map[string]interface{}
-	json.Unmarshal([]byte(body), &result)
-	tokens := result["usage"].(map[string]interface{})["total_tokens"].(float64)
-	choices := result["choices"].([]interface{})
-	choice := choices[0].(map[string]interface{})
-	text := choice["message"].(map[string]interface{})["content"].(string)
-	text = strings.ReplaceAll(text, "\n", " ")
-	return text, tokens
+	var result ollamaResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		fmt.Println(err)
+		return "error", 0, elapsed
+	}
+
+	text := strings.ReplaceAll(result.Response, "\n", " ")
+	return text, result.EvalCount + result.PromptEvalCount, elapsed
 }
 
 func readLines(path string) ([]string, error) {
@@ -109,38 +97,41 @@ func readLines(path string) ([]string, error) {
 }
 
 func main() {
-	role := flag.String("role", "You are a helpful assistant.", "Role of the AI.")
-	input_file := flag.String("input", "input.txt", "Input file.")
+	role := flag.String("role", "You are a helpful assistant.", "System prompt for the AI.")
+	inputFile := flag.String("input", "input.txt", "Input file.")
+	model := flag.String("model", "gemma3:4b", "Ollama model to use.")
+	think := flag.Bool("think", true, "Enable think mode.")
 
 	flag.Parse()
 
 	datetime := getDateTime()
-	log_filename := "log_" + datetime + ".txt"
-	log_file, err := os.Create(log_filename)
+	logFilename := "log_" + datetime + ".txt"
+	logFile, err := os.Create(logFilename)
 	if err != nil {
-		fmt.Println("Error: ", err)
+		fmt.Println("Error:", err)
+		return
+	}
+	defer logFile.Close()
+
+	for _, line := range []string{
+		"Model: " + *model,
+		"Role: " + *role,
+		"Input file: " + *inputFile,
+		"Output file: " + logFilename,
+	} {
+		fmt.Fprintln(logFile, line)
+		fmt.Println(line)
+	}
+
+	lines, err := readLines(*inputFile)
+	if err != nil {
+		fmt.Println("Error:", err)
 		return
 	}
 
-	defer log_file.Close()
-
-	fmt.Fprintln(log_file, "Role:", *role)
-	fmt.Println("Role:", *role)
-
-	fmt.Println("Input file:", *input_file)
-	fmt.Println("Output file:", log_filename)
-
-	lines, err := readLines(*input_file)
-	if err != nil {
-		fmt.Println("Error: ", err)
-		return
-	}
-
-	var questions []question
-	for _, line := range lines {
-		line = strings.ReplaceAll(line, "\t", " ")
-		question := question{question: line, answer: "", tokens: 0}
-		questions = append(questions, question)
+	questions := make([]question, len(lines))
+	for i, line := range lines {
+		questions[i].question = strings.ReplaceAll(line, "\t", " ")
 	}
 
 	var wg sync.WaitGroup
@@ -148,22 +139,20 @@ func main() {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			questions[n].answer, questions[n].tokens = ask(*role, questions[n].question)
+			questions[n].answer, questions[n].tokens, questions[n].duration = ask(*model, *think, *role, questions[n].question)
 		}(n)
 	}
 	wg.Wait()
 
+	totalTokens := 0
 	for _, q := range questions {
-		fmt.Fprintln(log_file, q.question+"	"+q.answer)
-		fmt.Println(q.question + "	" + q.answer)
+		line := fmt.Sprintf("%s\t%s\t[%d tokens, %.2fs]", q.question, q.answer, q.tokens, q.duration.Seconds())
+		fmt.Fprintln(logFile, line)
+		fmt.Println(line)
+		totalTokens += q.tokens
 	}
 
-	tokens := 0.0
-	for _, q := range questions {
-		tokens += q.tokens
-	}
-
-	cost := calculateCost(tokens)
-	fmt.Fprintln(log_file, "Total cost: ", cost, " USD")
-	fmt.Println("Total cost: ", cost, " USD")
+	summary := fmt.Sprintf("Total tokens: %d", totalTokens)
+	fmt.Fprintln(logFile, summary)
+	fmt.Println(summary)
 }
