@@ -14,8 +14,6 @@ import (
 	"time"
 )
 
-const ollamaURL = "http://192.168.0.15:11434"
-
 type question struct {
 	question string
 	answer   string
@@ -32,7 +30,7 @@ type ollamaResponse struct {
 	Error           string `json:"error"`
 }
 
-func ask(model string, think bool, system string, query string) (string, int, time.Duration) {
+func ask(ollamaURL string, model string, think bool, system string, query string) (string, int, time.Duration) {
 	type payload struct {
 		Model  string `json:"model"`
 		Prompt string `json:"prompt"`
@@ -103,10 +101,12 @@ func main() {
 	inputFile := flag.String("input", "input.txt", "Input file.")
 	model := flag.String("model", "gemma3:4b", "Ollama model to use.")
 	think := flag.Bool("think", false, "Enable think mode.")
+	ollamaURL := flag.String("url", "http://192.168.0.15:11434", "Ollama server URL.")
 
 	flag.Parse()
 
 	for _, line := range []string{
+		"URL: " + *ollamaURL,
 		"Model: " + *model,
 		"Role: " + *role,
 		"Input file: " + *inputFile,
@@ -130,7 +130,7 @@ func main() {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			questions[n].answer, questions[n].tokens, questions[n].duration = ask(*model, *think, *role, questions[n].question)
+			questions[n].answer, questions[n].tokens, questions[n].duration = ask(*ollamaURL, *model, *think, *role, questions[n].question)
 		}(n)
 	}
 	wg.Wait()
