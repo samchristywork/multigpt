@@ -19,6 +19,7 @@ type question struct {
 	answer   string
 	tokens   int
 	duration time.Duration
+	err      string
 }
 
 type ollamaResponse struct {
@@ -30,7 +31,7 @@ type ollamaResponse struct {
 	Error           string `json:"error"`
 }
 
-func ask(ollamaURL string, model string, think bool, system string, query string) (string, int, time.Duration) {
+func ask(ollamaURL string, model string, think bool, system string, query string) (string, int, time.Duration, string) {
 	type payload struct {
 		Model  string `json:"model"`
 		Prompt string `json:"prompt"`
@@ -47,38 +48,33 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 		Think:  think,
 	})
 	if err != nil {
-		fmt.Println(err)
-		return "error", 0, 0
+		return "", 0, 0, err.Error()
 	}
 
 	start := time.Now()
 	resp, err := http.Post(ollamaURL+"/api/generate", "application/json", bytes.NewReader(data))
 	if err != nil {
-		fmt.Println(err)
-		return "error", 0, 0
+		return "", 0, 0, err.Error()
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	elapsed := time.Since(start)
 	if err != nil {
-		fmt.Println(err)
-		return "error", 0, elapsed
+		return "", 0, elapsed, err.Error()
 	}
 
 	var result ollamaResponse
 	if err := json.Unmarshal(body, &result); err != nil {
-		fmt.Println(err)
-		return "error", 0, elapsed
+		return "", 0, elapsed, err.Error()
 	}
 
 	if result.Error != "" {
-		fmt.Println("Ollama error:", result.Error)
-		return "error", 0, elapsed
+		return "", 0, elapsed, result.Error
 	}
 
 	text := strings.ReplaceAll(result.Response, "\n", " ")
-	return text, result.EvalCount + result.PromptEvalCount, elapsed
+	return text, result.EvalCount + result.PromptEvalCount, elapsed, ""
 }
 
 func readLines(path string) ([]string, error) {
@@ -132,13 +128,17 @@ func main() {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			questions[n].answer, questions[n].tokens, questions[n].duration = ask(*ollamaURL, *model, *think, *role, questions[n].question)
+			questions[n].answer, questions[n].tokens, questions[n].duration, questions[n].err = ask(*ollamaURL, *model, *think, *role, questions[n].question)
 		}(n)
 	}
 	wg.Wait()
 
 	totalTokens := 0
 	for _, q := range questions {
+		if q.err != "" {
+			fmt.Fprintf(os.Stderr, "error: %s: %s\n", q.question, q.err)
+			continue
+		}
 		fmt.Printf("%s\t%s\t[%d tokens, %.2fs]\n", q.question, q.answer, q.tokens, q.duration.Seconds())
 		totalTokens += q.tokens
 	}
