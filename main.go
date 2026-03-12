@@ -32,10 +32,6 @@ type ollamaResponse struct {
 	Error           string `json:"error"`
 }
 
-func getDateTime() string {
-	return time.Now().Format("2006-01-02 15:04:05")
-}
-
 func ask(model string, think bool, system string, query string) (string, int, time.Duration) {
 	type payload struct {
 		Model  string `json:"model"`
@@ -110,22 +106,11 @@ func main() {
 
 	flag.Parse()
 
-	datetime := getDateTime()
-	logFilename := "log_" + datetime + ".txt"
-	logFile, err := os.Create(logFilename)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-	defer logFile.Close()
-
 	for _, line := range []string{
 		"Model: " + *model,
 		"Role: " + *role,
 		"Input file: " + *inputFile,
-		"Output file: " + logFilename,
 	} {
-		fmt.Fprintln(logFile, line)
 		fmt.Println(line)
 	}
 
@@ -152,13 +137,9 @@ func main() {
 
 	totalTokens := 0
 	for _, q := range questions {
-		line := fmt.Sprintf("%s\t%s\t[%d tokens, %.2fs]", q.question, q.answer, q.tokens, q.duration.Seconds())
-		fmt.Fprintln(logFile, line)
-		fmt.Println(line)
+		fmt.Printf("%s\t%s\t[%d tokens, %.2fs]\n", q.question, q.answer, q.tokens, q.duration.Seconds())
 		totalTokens += q.tokens
 	}
 
-	summary := fmt.Sprintf("Total tokens: %d", totalTokens)
-	fmt.Fprintln(logFile, summary)
-	fmt.Println(summary)
+	fmt.Println("Total tokens:", totalTokens)
 }
