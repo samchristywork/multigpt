@@ -29,6 +29,7 @@ type ollamaResponse struct {
 	PromptEvalCount int    `json:"prompt_eval_count"`
 	TotalDuration   int64  `json:"total_duration"`
 	Done            bool   `json:"done"`
+	Error           string `json:"error"`
 }
 
 func getDateTime() string {
@@ -77,6 +78,11 @@ func ask(model string, think bool, system string, query string) (string, int, ti
 		return "error", 0, elapsed
 	}
 
+	if result.Error != "" {
+		fmt.Println("Ollama error:", result.Error)
+		return "error", 0, elapsed
+	}
+
 	text := strings.ReplaceAll(result.Response, "\n", " ")
 	return text, result.EvalCount + result.PromptEvalCount, elapsed
 }
@@ -100,7 +106,7 @@ func main() {
 	role := flag.String("role", "You are a helpful assistant.", "System prompt for the AI.")
 	inputFile := flag.String("input", "input.txt", "Input file.")
 	model := flag.String("model", "gemma3:4b", "Ollama model to use.")
-	think := flag.Bool("think", true, "Enable think mode.")
+	think := flag.Bool("think", false, "Enable think mode.")
 
 	flag.Parse()
 
