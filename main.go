@@ -114,8 +114,8 @@ func main() {
 
 	lines, err := readLines(*inputFile)
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
 	}
 
 	questions := make([]question, len(lines))
