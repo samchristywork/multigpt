@@ -100,6 +100,7 @@ func main() {
 	think := flag.Bool("think", false, "Enable think mode.")
 	ollamaURL := flag.String("url", "http://192.168.0.15:11434", "Ollama server URL.")
 	timeoutSecs := flag.Int("timeout", 120, "HTTP timeout in seconds per query.")
+	concurrency := flag.Int("j", 0, "Max concurrent requests (0 = unlimited).")
 
 	flag.Parse()
 
@@ -123,11 +124,19 @@ func main() {
 		questions[i].question = strings.ReplaceAll(line, "\t", " ")
 	}
 
+	limit := *concurrency
+	if limit <= 0 {
+		limit = len(questions)
+	}
+	sem := make(chan struct{}, limit)
+
 	var wg sync.WaitGroup
 	for n := range questions {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			questions[n].answer, questions[n].tokens, questions[n].duration, questions[n].err = ask(*ollamaURL, *model, *think, *role, questions[n].question, time.Duration(*timeoutSecs)*time.Second)
 		}(n)
 	}
