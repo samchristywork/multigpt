@@ -52,7 +52,6 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 		return "", 0, 0, err.Error()
 	}
 
-	start := time.Now()
 	resp, err := client.Post(ollamaURL+"/api/generate", "application/json", bytes.NewReader(data))
 	if err != nil {
 		return "", 0, 0, err.Error()
@@ -60,22 +59,21 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
-	elapsed := time.Since(start)
 	if err != nil {
-		return "", 0, elapsed, err.Error()
+		return "", 0, 0, err.Error()
 	}
 
 	var result ollamaResponse
 	if err := json.Unmarshal(body, &result); err != nil {
-		return "", 0, elapsed, err.Error()
+		return "", 0, 0, err.Error()
 	}
 
 	if result.Error != "" {
-		return "", 0, elapsed, result.Error
+		return "", 0, 0, result.Error
 	}
 
 	text := strings.ReplaceAll(result.Response, "\n", " ")
-	return text, result.EvalCount + result.PromptEvalCount, elapsed, ""
+	return text, result.EvalCount + result.PromptEvalCount, time.Duration(result.TotalDuration), ""
 }
 
 func readLines(path string) ([]string, error) {
