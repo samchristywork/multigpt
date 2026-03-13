@@ -31,7 +31,8 @@ type ollamaResponse struct {
 	Error           string `json:"error"`
 }
 
-func ask(ollamaURL string, model string, think bool, system string, query string) (string, int, time.Duration, string) {
+func ask(ollamaURL string, model string, think bool, system string, query string, timeout time.Duration) (string, int, time.Duration, string) {
+	client := &http.Client{Timeout: timeout}
 	type payload struct {
 		Model  string `json:"model"`
 		Prompt string `json:"prompt"`
@@ -52,7 +53,7 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 	}
 
 	start := time.Now()
-	resp, err := http.Post(ollamaURL+"/api/generate", "application/json", bytes.NewReader(data))
+	resp, err := client.Post(ollamaURL+"/api/generate", "application/json", bytes.NewReader(data))
 	if err != nil {
 		return "", 0, 0, err.Error()
 	}
@@ -100,6 +101,7 @@ func main() {
 	model := flag.String("model", "gemma3:4b", "Ollama model to use.")
 	think := flag.Bool("think", false, "Enable think mode.")
 	ollamaURL := flag.String("url", "http://192.168.0.15:11434", "Ollama server URL.")
+	timeoutSecs := flag.Int("timeout", 120, "HTTP timeout in seconds per query.")
 
 	flag.Parse()
 
@@ -128,7 +130,7 @@ func main() {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			questions[n].answer, questions[n].tokens, questions[n].duration, questions[n].err = ask(*ollamaURL, *model, *think, *role, questions[n].question)
+			questions[n].answer, questions[n].tokens, questions[n].duration, questions[n].err = ask(*ollamaURL, *model, *think, *role, questions[n].question, time.Duration(*timeoutSecs)*time.Second)
 		}(n)
 	}
 	wg.Wait()
