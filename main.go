@@ -15,23 +15,25 @@ import (
 )
 
 type question struct {
-	question string
-	answer   string
-	tokens   int
-	duration time.Duration
-	err      string
+	question    string
+	answer      string
+	tokens      int
+	duration    time.Duration
+	tokensPerSec float64
+	err         string
 }
 
 type ollamaResponse struct {
 	Response        string `json:"response"`
 	EvalCount       int    `json:"eval_count"`
+	EvalDuration    int64  `json:"eval_duration"`
 	PromptEvalCount int    `json:"prompt_eval_count"`
 	TotalDuration   int64  `json:"total_duration"`
 	Done            bool   `json:"done"`
 	Error           string `json:"error"`
 }
 
-func ask(ollamaURL string, model string, think bool, system string, query string, timeout time.Duration) (string, int, time.Duration, string) {
+func ask(ollamaURL string, model string, think bool, system string, query string, timeout time.Duration) (string, int, time.Duration, float64, string) {
 	client := &http.Client{Timeout: timeout}
 	type payload struct {
 		Model  string `json:"model"`
@@ -49,31 +51,36 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 		Think:  think,
 	})
 	if err != nil {
-		return "", 0, 0, err.Error()
+		return "", 0, 0, 0, err.Error()
 	}
 
 	resp, err := client.Post(ollamaURL+"/api/generate", "application/json", bytes.NewReader(data))
 	if err != nil {
-		return "", 0, 0, err.Error()
+		return "", 0, 0, 0, err.Error()
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", 0, 0, err.Error()
+		return "", 0, 0, 0, err.Error()
 	}
 
 	var result ollamaResponse
 	if err := json.Unmarshal(body, &result); err != nil {
-		return "", 0, 0, err.Error()
+		return "", 0, 0, 0, err.Error()
 	}
 
 	if result.Error != "" {
-		return "", 0, 0, result.Error
+		return "", 0, 0, 0, result.Error
+	}
+
+	var tokensPerSec float64
+	if result.EvalDuration > 0 {
+		tokensPerSec = float64(result.EvalCount) / (float64(result.EvalDuration) / 1e9)
 	}
 
 	text := strings.ReplaceAll(result.Response, "\n", " ")
-	return text, result.EvalCount + result.PromptEvalCount, time.Duration(result.TotalDuration), ""
+	return text, result.EvalCount + result.PromptEvalCount, time.Duration(result.TotalDuration), tokensPerSec, ""
 }
 
 func listModels(ollamaURL string, timeout time.Duration) {
@@ -173,7 +180,7 @@ func main() {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			questions[n].answer, questions[n].tokens, questions[n].duration, questions[n].err = ask(*ollamaURL, *model, *think, *role, questions[n].question, time.Duration(*timeoutSecs)*time.Second)
+			questions[n].answer, questions[n].tokens, questions[n].duration, questions[n].tokensPerSec, questions[n].err = ask(*ollamaURL, *model, *think, *role, questions[n].question, time.Duration(*timeoutSecs)*time.Second)
 		}(n)
 	}
 	wg.Wait()
@@ -184,7 +191,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error: %s: %s\n", q.question, q.err)
 			continue
 		}
-		fmt.Printf("%s\t%s\t[%d tokens, %.2fs]\n", q.question, q.answer, q.tokens, q.duration.Seconds())
+		fmt.Printf("%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", q.question, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
 		totalTokens += q.tokens
 	}
 
