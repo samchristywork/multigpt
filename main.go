@@ -76,6 +76,36 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 	return text, result.EvalCount + result.PromptEvalCount, time.Duration(result.TotalDuration), ""
 }
 
+func listModels(ollamaURL string, timeout time.Duration) {
+	client := &http.Client{Timeout: timeout}
+	resp, err := client.Get(ollamaURL + "/api/tags")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
+	}
+
+	var result struct {
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
+	}
+
+	for _, m := range result.Models {
+		fmt.Println(m.Name)
+	}
+}
+
 func readLines(path string) ([]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -101,8 +131,14 @@ func main() {
 	ollamaURL := flag.String("url", "http://192.168.0.15:11434", "Ollama server URL.")
 	timeoutSecs := flag.Int("timeout", 120, "HTTP timeout in seconds per query.")
 	concurrency := flag.Int("j", 0, "Max concurrent requests (0 = unlimited).")
+	listModelsFlag := flag.Bool("list-models", false, "List available models and exit.")
 
 	flag.Parse()
+
+	if *listModelsFlag {
+		listModels(*ollamaURL, time.Duration(*timeoutSecs)*time.Second)
+		return
+	}
 
 	for _, line := range []string{
 		"URL: " + *ollamaURL,
