@@ -14,6 +14,14 @@ import (
 	"time"
 )
 
+type outputFormat string
+
+const (
+	formatTSV   outputFormat = "tsv"
+	formatPlain outputFormat = "plain"
+	formatJSON  outputFormat = "json"
+)
+
 type question struct {
 	question    string
 	answer      string
@@ -139,6 +147,7 @@ func main() {
 	timeoutSecs := flag.Int("timeout", 120, "HTTP timeout in seconds per query.")
 	concurrency := flag.Int("j", 0, "Max concurrent requests (0 = unlimited).")
 	listModelsFlag := flag.Bool("list-models", false, "List available models and exit.")
+	format := flag.String("format", "tsv", "Output format: tsv, plain, or json.")
 
 	flag.Parse()
 
@@ -186,14 +195,41 @@ func main() {
 	wg.Wait()
 
 	totalTokens := 0
+	var successful []question
 	for _, q := range questions {
 		if q.err != "" {
 			fmt.Fprintf(os.Stderr, "error: %s: %s\n", q.question, q.err)
 			continue
 		}
-		fmt.Printf("%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", q.question, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
 		totalTokens += q.tokens
+		successful = append(successful, q)
 	}
 
-	fmt.Println("Total tokens:", totalTokens)
+	switch outputFormat(*format) {
+	case formatJSON:
+		type jsonQuestion struct {
+			Question     string  `json:"question"`
+			Answer       string  `json:"answer"`
+			Tokens       int     `json:"tokens"`
+			DurationSecs float64 `json:"duration_secs"`
+			TokensPerSec float64 `json:"tokens_per_sec"`
+		}
+		out := make([]jsonQuestion, len(successful))
+		for i, q := range successful {
+			out[i] = jsonQuestion{q.question, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec}
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(out)
+	case formatPlain:
+		for _, q := range successful {
+			fmt.Printf("Q: %s\nA: %s\n   [%d tokens, %.2fs, %.1f tok/s]\n\n", q.question, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
+		}
+		fmt.Println("Total tokens:", totalTokens)
+	default: // tsv
+		for _, q := range successful {
+			fmt.Printf("%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", q.question, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
+		}
+		fmt.Println("Total tokens:", totalTokens)
+	}
 }
