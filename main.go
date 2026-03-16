@@ -92,8 +92,7 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 			tokensPerSec = float64(result.EvalCount) / (float64(result.EvalDuration) / 1e9)
 		}
 
-		text := strings.ReplaceAll(result.Response, "\n", " ")
-		return text, result.EvalCount + result.PromptEvalCount, time.Duration(result.TotalDuration), tokensPerSec, ""
+		return result.Response, result.EvalCount + result.PromptEvalCount, time.Duration(result.TotalDuration), tokensPerSec, ""
 	}
 
 	return "", 0, 0, 0, lastErr
@@ -241,7 +240,8 @@ func main() {
 		fmt.Println("Total tokens:", totalTokens)
 	default: // tsv
 		for _, q := range successful {
-			fmt.Printf("%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", q.question, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
+			answer := strings.ReplaceAll(q.answer, "\n", " ")
+			fmt.Printf("%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", q.question, answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
 		}
 		fmt.Println("Total tokens:", totalTokens)
 	}
