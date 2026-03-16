@@ -41,7 +41,7 @@ type ollamaResponse struct {
 	Error           string `json:"error"`
 }
 
-func ask(ollamaURL string, model string, think bool, system string, query string, timeout time.Duration) (string, int, time.Duration, float64, string) {
+func ask(ollamaURL string, model string, think bool, system string, query string, timeout time.Duration, retries int) (string, int, time.Duration, float64, string) {
 	client := &http.Client{Timeout: timeout}
 	type payload struct {
 		Model  string `json:"model"`
@@ -62,33 +62,41 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 		return "", 0, 0, 0, err.Error()
 	}
 
-	resp, err := client.Post(ollamaURL+"/api/generate", "application/json", bytes.NewReader(data))
-	if err != nil {
-		return "", 0, 0, 0, err.Error()
-	}
-	defer resp.Body.Close()
+	var lastErr string
+	for attempt := 0; attempt <= retries; attempt++ {
+		resp, err := client.Post(ollamaURL+"/api/generate", "application/json", bytes.NewReader(data))
+		if err != nil {
+			lastErr = err.Error()
+			continue
+		}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", 0, 0, 0, err.Error()
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err.Error()
+			continue
+		}
+
+		var result ollamaResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			lastErr = err.Error()
+			continue
+		}
+
+		if result.Error != "" {
+			return "", 0, 0, 0, result.Error
+		}
+
+		var tokensPerSec float64
+		if result.EvalDuration > 0 {
+			tokensPerSec = float64(result.EvalCount) / (float64(result.EvalDuration) / 1e9)
+		}
+
+		text := strings.ReplaceAll(result.Response, "\n", " ")
+		return text, result.EvalCount + result.PromptEvalCount, time.Duration(result.TotalDuration), tokensPerSec, ""
 	}
 
-	var result ollamaResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", 0, 0, 0, err.Error()
-	}
-
-	if result.Error != "" {
-		return "", 0, 0, 0, result.Error
-	}
-
-	var tokensPerSec float64
-	if result.EvalDuration > 0 {
-		tokensPerSec = float64(result.EvalCount) / (float64(result.EvalDuration) / 1e9)
-	}
-
-	text := strings.ReplaceAll(result.Response, "\n", " ")
-	return text, result.EvalCount + result.PromptEvalCount, time.Duration(result.TotalDuration), tokensPerSec, ""
+	return "", 0, 0, 0, lastErr
 }
 
 func listModels(ollamaURL string, timeout time.Duration) {
@@ -154,6 +162,7 @@ func main() {
 	concurrency := flag.Int("j", 0, "Max concurrent requests (0 = unlimited).")
 	listModelsFlag := flag.Bool("list-models", false, "List available models and exit.")
 	format := flag.String("format", "tsv", "Output format: tsv, plain, or json.")
+	retries := flag.Int("retries", 0, "Number of retries on transient errors.")
 
 	flag.Parse()
 
@@ -193,7 +202,7 @@ func main() {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			questions[n].answer, questions[n].tokens, questions[n].duration, questions[n].tokensPerSec, questions[n].err = ask(*ollamaURL, *model, *think, *role, questions[n].question, time.Duration(*timeoutSecs)*time.Second)
+			questions[n].answer, questions[n].tokens, questions[n].duration, questions[n].tokensPerSec, questions[n].err = ask(*ollamaURL, *model, *think, *role, questions[n].question, time.Duration(*timeoutSecs)*time.Second, *retries)
 		}(n)
 	}
 	wg.Wait()
