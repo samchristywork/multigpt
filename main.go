@@ -122,14 +122,20 @@ func listModels(ollamaURL string, timeout time.Duration) {
 }
 
 func readLines(path string) ([]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
+	var r io.Reader
+	if path == "-" {
+		r = os.Stdin
+	} else {
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		r = f
 	}
-	defer file.Close()
 
 	var lines []string
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		if line := scanner.Text(); line != "" {
 			lines = append(lines, line)
@@ -140,7 +146,7 @@ func readLines(path string) ([]string, error) {
 
 func main() {
 	role := flag.String("role", "You are a helpful assistant.", "System prompt for the AI.")
-	inputFile := flag.String("input", "input.txt", "Input file.")
+	inputFile := flag.String("input", "-", "Input file (- for stdin).")
 	model := flag.String("model", "gemma3:4b", "Ollama model to use.")
 	think := flag.Bool("think", false, "Enable think mode.")
 	ollamaURL := flag.String("url", "http://192.168.0.15:11434", "Ollama server URL.")
@@ -156,13 +162,11 @@ func main() {
 		return
 	}
 
-	for _, line := range []string{
-		"URL: " + *ollamaURL,
-		"Model: " + *model,
-		"Role: " + *role,
-		"Input file: " + *inputFile,
-	} {
-		fmt.Println(line)
+	fmt.Println("URL: " + *ollamaURL)
+	fmt.Println("Model: " + *model)
+	fmt.Println("Role: " + *role)
+	if *inputFile != "-" {
+		fmt.Println("Input file: " + *inputFile)
 	}
 
 	lines, err := readLines(*inputFile)
