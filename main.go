@@ -170,11 +170,11 @@ func main() {
 		return
 	}
 
-	fmt.Println("URL: " + *ollamaURL)
-	fmt.Println("Model: " + *model)
-	fmt.Println("Role: " + *role)
+	fmt.Fprintln(os.Stderr, "URL: " + *ollamaURL)
+	fmt.Fprintln(os.Stderr, "Model: " + *model)
+	fmt.Fprintln(os.Stderr, "Role: " + *role)
 	if *inputFile != "-" {
-		fmt.Println("Input file: " + *inputFile)
+		fmt.Fprintln(os.Stderr, "Input file: " + *inputFile)
 	}
 
 	lines, err := readLines(*inputFile)
