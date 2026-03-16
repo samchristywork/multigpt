@@ -238,11 +238,14 @@ func main() {
 			fmt.Printf("Q: %s\nA: %s\n   [%d tokens, %.2fs, %.1f tok/s]\n\n", q.question, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
 		}
 		fmt.Println("Total tokens:", totalTokens)
-	default: // tsv
+	case formatTSV:
 		for _, q := range successful {
 			answer := strings.ReplaceAll(q.answer, "\n", " ")
 			fmt.Printf("%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", q.question, answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
 		}
 		fmt.Println("Total tokens:", totalTokens)
+	default:
+		fmt.Fprintf(os.Stderr, "error: unknown format %q (valid: tsv, plain, json)\n", *format)
+		os.Exit(1)
 	}
 }
