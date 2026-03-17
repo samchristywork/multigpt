@@ -23,12 +23,13 @@ const (
 )
 
 type question struct {
-	question    string
-	answer      string
-	tokens      int
-	duration    time.Duration
+	question     string
+	model        string
+	answer       string
+	tokens       int
+	duration     time.Duration
 	tokensPerSec float64
-	err         string
+	err          string
 }
 
 type ollamaResponse struct {
@@ -170,11 +171,16 @@ func main() {
 		return
 	}
 
-	fmt.Fprintln(os.Stderr, "URL: " + *ollamaURL)
-	fmt.Fprintln(os.Stderr, "Model: " + *model)
-	fmt.Fprintln(os.Stderr, "Role: " + *role)
+	models := strings.Split(*model, ",")
+	for i, m := range models {
+		models[i] = strings.TrimSpace(m)
+	}
+
+	fmt.Fprintln(os.Stderr, "URL: "+*ollamaURL)
+	fmt.Fprintln(os.Stderr, "Models: "+strings.Join(models, ", "))
+	fmt.Fprintln(os.Stderr, "Role: "+*role)
 	if *inputFile != "-" {
-		fmt.Fprintln(os.Stderr, "Input file: " + *inputFile)
+		fmt.Fprintln(os.Stderr, "Input file: "+*inputFile)
 	}
 
 	lines, err := readLines(*inputFile)
@@ -183,9 +189,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	questions := make([]question, len(lines))
-	for i, line := range lines {
-		questions[i].question = strings.ReplaceAll(line, "\t", " ")
+	var questions []question
+	for _, line := range lines {
+		for _, m := range models {
+			questions = append(questions, question{
+				question: strings.ReplaceAll(line, "\t", " "),
+				model:    m,
+			})
+		}
 	}
 
 	limit := *concurrency
@@ -204,7 +215,7 @@ func main() {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			questions[n].answer, questions[n].tokens, questions[n].duration, questions[n].tokensPerSec, questions[n].err = ask(*ollamaURL, *model, *think, *role, questions[n].question, time.Duration(*timeoutSecs)*time.Second, *retries)
+			questions[n].answer, questions[n].tokens, questions[n].duration, questions[n].tokensPerSec, questions[n].err = ask(*ollamaURL, questions[n].model, *think, *role, questions[n].question, time.Duration(*timeoutSecs)*time.Second, *retries)
 		}(n)
 	}
 	wg.Wait()
@@ -226,6 +237,7 @@ func main() {
 	case formatJSON:
 		type jsonQuestion struct {
 			Question     string  `json:"question"`
+			Model        string  `json:"model"`
 			Answer       string  `json:"answer"`
 			Tokens       int     `json:"tokens"`
 			DurationSecs float64 `json:"duration_secs"`
@@ -233,7 +245,7 @@ func main() {
 		}
 		results := make([]jsonQuestion, len(successful))
 		for i, q := range successful {
-			results[i] = jsonQuestion{q.question, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec}
+			results[i] = jsonQuestion{q.question, q.model, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec}
 		}
 		out := struct {
 			Results     []jsonQuestion `json:"results"`
@@ -244,13 +256,13 @@ func main() {
 		enc.Encode(out)
 	case formatPlain:
 		for _, q := range successful {
-			fmt.Printf("Q: %s\nA: %s\n   [%d tokens, %.2fs, %.1f tok/s]\n\n", q.question, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
+			fmt.Printf("Q: %s\nM: %s\nA: %s\n   [%d tokens, %.2fs, %.1f tok/s]\n\n", q.question, q.model, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
 		}
 		fmt.Println("Total tokens:", totalTokens)
 	case formatTSV:
 		for _, q := range successful {
 			answer := strings.ReplaceAll(q.answer, "\n", " ")
-			fmt.Printf("%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", q.question, answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
+			fmt.Printf("%s\t%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", q.question, q.model, answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
 		}
 		fmt.Println("Total tokens:", totalTokens)
 	default:
