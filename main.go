@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -208,6 +209,9 @@ func main() {
 	}
 	sem := make(chan struct{}, limit)
 
+	total := len(questions)
+	var done int64
+
 	n := len(lines)
 	for i := range models {
 		var wg sync.WaitGroup
@@ -219,6 +223,8 @@ func main() {
 				sem <- struct{}{}
 				defer func() { <-sem }()
 				questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, *role, questions[idx].question, time.Duration(*timeoutSecs)*time.Second, *retries)
+				d := atomic.AddInt64(&done, 1)
+				fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
 			}(idx)
 		}
 		wg.Wait()
