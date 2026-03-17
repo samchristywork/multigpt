@@ -164,12 +164,24 @@ func main() {
 	listModelsFlag := flag.Bool("list-models", false, "List available models and exit.")
 	format := flag.String("format", "tsv", "Output format: tsv, plain, or json.")
 	retries := flag.Int("retries", 0, "Number of retries on transient errors.")
+	outputFile := flag.String("output", "", "Write results to file instead of stdout.")
 
 	flag.Parse()
 
 	if *listModelsFlag {
 		listModels(*ollamaURL, time.Duration(*timeoutSecs)*time.Second)
 		return
+	}
+
+	var out io.Writer = os.Stdout
+	if *outputFile != "" {
+		f, err := os.Create(*outputFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		out = f
 	}
 
 	models := strings.Split(*model, ",")
@@ -257,24 +269,24 @@ func main() {
 		for i, q := range successful {
 			results[i] = jsonQuestion{q.question, q.model, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec}
 		}
-		out := struct {
+		envelope := struct {
 			Results     []jsonQuestion `json:"results"`
 			TotalTokens int            `json:"total_tokens"`
 		}{results, totalTokens}
-		enc := json.NewEncoder(os.Stdout)
+		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
-		enc.Encode(out)
+		enc.Encode(envelope)
 	case formatPlain:
 		for _, q := range successful {
-			fmt.Printf("Q: %s\nM: %s\nA: %s\n   [%d tokens, %.2fs, %.1f tok/s]\n\n", q.question, q.model, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
+			fmt.Fprintf(out, "Q: %s\nM: %s\nA: %s\n   [%d tokens, %.2fs, %.1f tok/s]\n\n", q.question, q.model, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
 		}
-		fmt.Println("Total tokens:", totalTokens)
+		fmt.Fprintln(out, "Total tokens:", totalTokens)
 	case formatTSV:
 		for _, q := range successful {
 			answer := strings.ReplaceAll(q.answer, "\n", " ")
-			fmt.Printf("%s\t%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", q.question, q.model, answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
+			fmt.Fprintf(out, "%s\t%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", q.question, q.model, answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
 		}
-		fmt.Println("Total tokens:", totalTokens)
+		fmt.Fprintln(out, "Total tokens:", totalTokens)
 	default:
 		fmt.Fprintf(os.Stderr, "error: unknown format %q (valid: tsv, plain, json)\n", *format)
 		os.Exit(1)
