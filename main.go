@@ -192,6 +192,9 @@ func main() {
 	if limit <= 0 {
 		limit = len(questions)
 	}
+	if limit < 1 {
+		limit = 1
+	}
 	sem := make(chan struct{}, limit)
 
 	var wg sync.WaitGroup
