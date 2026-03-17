@@ -190,8 +190,8 @@ func main() {
 	}
 
 	var questions []question
-	for _, line := range lines {
-		for _, m := range models {
+	for _, m := range models {
+		for _, line := range lines {
 			questions = append(questions, question{
 				question: strings.ReplaceAll(line, "\t", " "),
 				model:    m,
@@ -201,24 +201,28 @@ func main() {
 
 	limit := *concurrency
 	if limit <= 0 {
-		limit = len(questions)
+		limit = len(lines)
 	}
 	if limit < 1 {
 		limit = 1
 	}
 	sem := make(chan struct{}, limit)
 
-	var wg sync.WaitGroup
-	for n := range questions {
-		wg.Add(1)
-		go func(n int) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			questions[n].answer, questions[n].tokens, questions[n].duration, questions[n].tokensPerSec, questions[n].err = ask(*ollamaURL, questions[n].model, *think, *role, questions[n].question, time.Duration(*timeoutSecs)*time.Second, *retries)
-		}(n)
+	n := len(lines)
+	for i := range models {
+		var wg sync.WaitGroup
+		for j := 0; j < n; j++ {
+			idx := i*n + j
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, *role, questions[idx].question, time.Duration(*timeoutSecs)*time.Second, *retries)
+			}(idx)
+		}
+		wg.Wait()
 	}
-	wg.Wait()
 
 	totalTokens := 0
 	var successful []question
