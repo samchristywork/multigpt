@@ -39,29 +39,32 @@ type ollamaResponse struct {
 	EvalDuration    int64  `json:"eval_duration"`
 	PromptEvalCount int    `json:"prompt_eval_count"`
 	TotalDuration   int64  `json:"total_duration"`
+	Context         []int  `json:"context"`
 	Done            bool   `json:"done"`
 	Error           string `json:"error"`
 }
 
-func ask(ollamaURL string, model string, think bool, system string, query string, timeout time.Duration, retries int) (string, int, time.Duration, float64, string) {
+func ask(ollamaURL string, model string, think bool, system string, query string, timeout time.Duration, retries int, ctx []int) (string, int, time.Duration, float64, []int, string) {
 	client := &http.Client{Timeout: timeout}
 	type payload struct {
-		Model  string `json:"model"`
-		Prompt string `json:"prompt"`
-		System string `json:"system"`
-		Stream bool   `json:"stream"`
-		Think  bool   `json:"think"`
+		Model   string `json:"model"`
+		Prompt  string `json:"prompt"`
+		System  string `json:"system"`
+		Stream  bool   `json:"stream"`
+		Think   bool   `json:"think"`
+		Context []int  `json:"context,omitempty"`
 	}
 
 	data, err := json.Marshal(payload{
-		Model:  model,
-		Prompt: query,
-		System: system,
-		Stream: false,
-		Think:  think,
+		Model:   model,
+		Prompt:  query,
+		System:  system,
+		Stream:  false,
+		Think:   think,
+		Context: ctx,
 	})
 	if err != nil {
-		return "", 0, 0, 0, err.Error()
+		return "", 0, 0, 0, nil, err.Error()
 	}
 
 	var lastErr string
@@ -86,7 +89,7 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 		}
 
 		if result.Error != "" {
-			return "", 0, 0, 0, result.Error
+			return "", 0, 0, 0, nil, result.Error
 		}
 
 		var tokensPerSec float64
@@ -94,10 +97,10 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 			tokensPerSec = float64(result.EvalCount) / (float64(result.EvalDuration) / 1e9)
 		}
 
-		return result.Response, result.EvalCount + result.PromptEvalCount, time.Duration(result.TotalDuration), tokensPerSec, ""
+		return result.Response, result.EvalCount + result.PromptEvalCount, time.Duration(result.TotalDuration), tokensPerSec, result.Context, ""
 	}
 
-	return "", 0, 0, 0, lastErr
+	return "", 0, 0, 0, nil, lastErr
 }
 
 func listModels(ollamaURL string, timeout time.Duration) {
@@ -165,6 +168,7 @@ func main() {
 	format := flag.String("format", "tsv", "Output format: tsv, plain, or json.")
 	retries := flag.Int("retries", 0, "Number of retries on transient errors.")
 	outputFile := flag.String("output", "", "Write results to file instead of stdout.")
+	conversation := flag.Bool("context", false, "Thread context across questions (sequential, maintains conversation state).")
 
 	flag.Parse()
 
@@ -212,34 +216,50 @@ func main() {
 		}
 	}
 
-	limit := *concurrency
-	if limit <= 0 {
-		limit = len(lines)
-	}
-	if limit < 1 {
-		limit = 1
-	}
-	sem := make(chan struct{}, limit)
-
 	total := len(questions)
 	var done int64
-
 	n := len(lines)
-	for i := range models {
-		var wg sync.WaitGroup
-		for j := 0; j < n; j++ {
-			idx := i*n + j
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				sem <- struct{}{}
-				defer func() { <-sem }()
-				questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, *role, questions[idx].question, time.Duration(*timeoutSecs)*time.Second, *retries)
+	timeout := time.Duration(*timeoutSecs) * time.Second
+
+	if *conversation {
+		for i := range models {
+			var ctx []int
+			for j := 0; j < n; j++ {
+				idx := i*n + j
+				questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, ctx, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, *role, questions[idx].question, timeout, *retries, ctx)
+				if questions[idx].err != "" {
+					ctx = nil
+				}
 				d := atomic.AddInt64(&done, 1)
 				fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
-			}(idx)
+			}
 		}
-		wg.Wait()
+	} else {
+		limit := *concurrency
+		if limit <= 0 {
+			limit = len(lines)
+		}
+		if limit < 1 {
+			limit = 1
+		}
+		sem := make(chan struct{}, limit)
+
+		for i := range models {
+			var wg sync.WaitGroup
+			for j := 0; j < n; j++ {
+				idx := i*n + j
+				wg.Add(1)
+				go func(idx int) {
+					defer wg.Done()
+					sem <- struct{}{}
+					defer func() { <-sem }()
+					questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, _, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, *role, questions[idx].question, timeout, *retries, nil)
+					d := atomic.AddInt64(&done, 1)
+					fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
+				}(idx)
+			}
+			wg.Wait()
+		}
 	}
 
 	totalTokens := 0
