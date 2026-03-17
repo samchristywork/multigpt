@@ -211,9 +211,11 @@ func main() {
 
 	totalTokens := 0
 	var successful []question
+	hadErrors := false
 	for _, q := range questions {
 		if q.err != "" {
 			fmt.Fprintf(os.Stderr, "error: %s: %s\n", q.question, q.err)
+			hadErrors = true
 			continue
 		}
 		totalTokens += q.tokens
@@ -253,6 +255,10 @@ func main() {
 		fmt.Println("Total tokens:", totalTokens)
 	default:
 		fmt.Fprintf(os.Stderr, "error: unknown format %q (valid: tsv, plain, json)\n", *format)
+		os.Exit(1)
+	}
+
+	if hadErrors {
 		os.Exit(1)
 	}
 }
