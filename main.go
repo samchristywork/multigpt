@@ -229,10 +229,14 @@ func main() {
 			DurationSecs float64 `json:"duration_secs"`
 			TokensPerSec float64 `json:"tokens_per_sec"`
 		}
-		out := make([]jsonQuestion, len(successful))
+		results := make([]jsonQuestion, len(successful))
 		for i, q := range successful {
-			out[i] = jsonQuestion{q.question, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec}
+			results[i] = jsonQuestion{q.question, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec}
 		}
+		out := struct {
+			Results     []jsonQuestion `json:"results"`
+			TotalTokens int            `json:"total_tokens"`
+		}{results, totalTokens}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		enc.Encode(out)
