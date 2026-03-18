@@ -71,6 +71,10 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 
 	var lastErr string
 	for attempt := 0; attempt <= retries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(1<<uint(attempt-1)) * time.Second)
+		}
+
 		resp, err := client.Post(ollamaURL+"/api/generate", "application/json", bytes.NewReader(data))
 		if err != nil {
 			lastErr = err.Error()
