@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"text/template"
 	"time"
 )
 
@@ -225,12 +226,23 @@ func main() {
 	outputFile := flag.String("output", "", "Write results to file instead of stdout.")
 	conversation := flag.Bool("context", false, "Thread context across questions (sequential, maintains conversation state).")
 	stream := flag.Bool("stream", false, "Stream tokens as they arrive (sequential, plain text only).")
+	tmplStr := flag.String("template", "", `Go template wrapping each input line, e.g. "Translate to French: {{.}}"`)
 
 	flag.Parse()
 
 	if *listModelsFlag {
 		listModels(*ollamaURL, time.Duration(*timeoutSecs)*time.Second)
 		return
+	}
+
+	var tmpl *template.Template
+	if *tmplStr != "" {
+		var err error
+		tmpl, err = template.New("prompt").Parse(*tmplStr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error: invalid template:", err)
+			os.Exit(1)
+		}
 	}
 
 	if *stream && outputFormat(*format) != formatPlain {
@@ -278,6 +290,14 @@ func main() {
 					text = line[idx+2:]
 					qTimeout = d
 				}
+			}
+			if tmpl != nil {
+				var buf strings.Builder
+				if err := tmpl.Execute(&buf, text); err != nil {
+					fmt.Fprintln(os.Stderr, "error: template execution failed:", err)
+					os.Exit(1)
+				}
+				text = buf.String()
 			}
 			questions = append(questions, question{
 				question: strings.ReplaceAll(text, "\t", " "),
