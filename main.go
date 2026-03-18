@@ -26,6 +26,7 @@ const (
 type question struct {
 	question     string
 	model        string
+	timeout      time.Duration
 	answer       string
 	tokens       int
 	duration     time.Duration
@@ -207,11 +208,21 @@ func main() {
 	}
 
 	var questions []question
+	defaultTimeout := time.Duration(*timeoutSecs) * time.Second
 	for _, m := range models {
 		for _, line := range lines {
+			text := line
+			qTimeout := defaultTimeout
+			if idx := strings.Index(line, ": "); idx > 0 {
+				if d, err := time.ParseDuration(line[:idx]); err == nil {
+					text = line[idx+2:]
+					qTimeout = d
+				}
+			}
 			questions = append(questions, question{
-				question: strings.ReplaceAll(line, "\t", " "),
+				question: strings.ReplaceAll(text, "\t", " "),
 				model:    m,
+				timeout:  qTimeout,
 			})
 		}
 	}
@@ -219,14 +230,13 @@ func main() {
 	total := len(questions)
 	var done int64
 	n := len(lines)
-	timeout := time.Duration(*timeoutSecs) * time.Second
 
 	if *conversation {
 		for i := range models {
 			var ctx []int
 			for j := 0; j < n; j++ {
 				idx := i*n + j
-				questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, ctx, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, *role, questions[idx].question, timeout, *retries, ctx)
+				questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, ctx, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, *role, questions[idx].question, questions[idx].timeout, *retries, ctx)
 				if questions[idx].err != "" {
 					ctx = nil
 				}
@@ -253,7 +263,7 @@ func main() {
 					defer wg.Done()
 					sem <- struct{}{}
 					defer func() { <-sem }()
-					questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, _, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, *role, questions[idx].question, timeout, *retries, nil)
+					questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, _, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, *role, questions[idx].question, questions[idx].timeout, *retries, nil)
 					d := atomic.AddInt64(&done, 1)
 					fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
 				}(idx)
