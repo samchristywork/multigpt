@@ -391,15 +391,19 @@ func main() {
 	}
 
 	totalTokens := 0
+	var totalDuration time.Duration
+	failures := 0
 	var successful []question
 	hadErrors := false
 	for _, q := range questions {
 		if q.err != "" {
 			fmt.Fprintf(os.Stderr, "error: %s: %s\n", q.question, q.err)
 			hadErrors = true
+			failures++
 			continue
 		}
 		totalTokens += q.tokens
+		totalDuration += q.duration
 		successful = append(successful, q)
 	}
 
@@ -417,10 +421,19 @@ func main() {
 		for i, q := range successful {
 			results[i] = jsonQuestion{q.question, q.model, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec}
 		}
+		type jsonSummary struct {
+			TotalTokens      int     `json:"total_tokens"`
+			TotalDurationSecs float64 `json:"total_duration_secs"`
+			Succeeded        int     `json:"succeeded"`
+			Failed           int     `json:"failed"`
+		}
 		envelope := struct {
-			Results     []jsonQuestion `json:"results"`
-			TotalTokens int            `json:"total_tokens"`
-		}{results, totalTokens}
+			Results []jsonQuestion `json:"results"`
+			Summary jsonSummary    `json:"summary"`
+		}{
+			Results: results,
+			Summary: jsonSummary{totalTokens, totalDuration.Seconds(), len(successful), failures},
+		}
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
 		enc.Encode(envelope)
