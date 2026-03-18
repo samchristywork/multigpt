@@ -104,6 +104,60 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 	return "", 0, 0, 0, nil, lastErr
 }
 
+func askStream(ollamaURL, model string, think bool, system, query string, timeout time.Duration, ctx []int, w io.Writer) (int, time.Duration, float64, []int, string) {
+	client := &http.Client{Timeout: timeout}
+	type payload struct {
+		Model   string `json:"model"`
+		Prompt  string `json:"prompt"`
+		System  string `json:"system"`
+		Stream  bool   `json:"stream"`
+		Think   bool   `json:"think"`
+		Context []int  `json:"context,omitempty"`
+	}
+
+	data, err := json.Marshal(payload{
+		Model:   model,
+		Prompt:  query,
+		System:  system,
+		Stream:  true,
+		Think:   think,
+		Context: ctx,
+	})
+	if err != nil {
+		return 0, 0, 0, nil, err.Error()
+	}
+
+	resp, err := client.Post(ollamaURL+"/api/generate", "application/json", bytes.NewReader(data))
+	if err != nil {
+		return 0, 0, 0, nil, err.Error()
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		var chunk ollamaResponse
+		if err := json.Unmarshal(scanner.Bytes(), &chunk); err != nil {
+			return 0, 0, 0, nil, err.Error()
+		}
+		if chunk.Error != "" {
+			return 0, 0, 0, nil, chunk.Error
+		}
+		fmt.Fprint(w, chunk.Response)
+		if chunk.Done {
+			fmt.Fprintln(w)
+			var tokensPerSec float64
+			if chunk.EvalDuration > 0 {
+				tokensPerSec = float64(chunk.EvalCount) / (float64(chunk.EvalDuration) / 1e9)
+			}
+			return chunk.EvalCount + chunk.PromptEvalCount, time.Duration(chunk.TotalDuration), tokensPerSec, chunk.Context, ""
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return 0, 0, 0, nil, err.Error()
+	}
+	return 0, 0, 0, nil, "stream ended without done message"
+}
+
 func listModels(ollamaURL string, timeout time.Duration) {
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Get(ollamaURL + "/api/tags")
@@ -170,6 +224,7 @@ func main() {
 	retries := flag.Int("retries", 0, "Number of retries on transient errors.")
 	outputFile := flag.String("output", "", "Write results to file instead of stdout.")
 	conversation := flag.Bool("context", false, "Thread context across questions (sequential, maintains conversation state).")
+	stream := flag.Bool("stream", false, "Stream tokens as they arrive (sequential, plain text only).")
 
 	flag.Parse()
 
@@ -230,6 +285,35 @@ func main() {
 	total := len(questions)
 	var done int64
 	n := len(lines)
+
+	if *stream {
+		for i := range models {
+			for j := 0; j < n; j++ {
+				idx := i*n + j
+				q := &questions[idx]
+				fmt.Fprintf(os.Stderr, "Q: %s\nM: %s\n", q.question, q.model)
+				fmt.Fprintf(out, "Q: %s\nM: %s\nA: ", q.question, q.model)
+				q.tokens, q.duration, q.tokensPerSec, _, q.err = askStream(*ollamaURL, q.model, *think, *role, q.question, q.timeout, nil, out)
+				if q.err == "" {
+					fmt.Fprintf(out, "   [%d tokens, %.2fs, %.1f tok/s]\n\n", q.tokens, q.duration.Seconds(), q.tokensPerSec)
+				}
+				d := atomic.AddInt64(&done, 1)
+				fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
+			}
+		}
+		if hadErrors := func() bool {
+			for _, q := range questions {
+				if q.err != "" {
+					fmt.Fprintf(os.Stderr, "error: %s: %s\n", q.question, q.err)
+					return true
+				}
+			}
+			return false
+		}(); hadErrors {
+			os.Exit(1)
+		}
+		return
+	}
 
 	if *conversation {
 		for i := range models {
