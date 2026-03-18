@@ -220,7 +220,7 @@ func main() {
 	timeoutSecs := flag.Int("timeout", 120, "HTTP timeout in seconds per query.")
 	concurrency := flag.Int("j", 0, "Max concurrent requests (0 = unlimited).")
 	listModelsFlag := flag.Bool("list-models", false, "List available models and exit.")
-	format := flag.String("format", "tsv", "Output format: tsv, plain, or json.")
+	format := flag.String("format", "plain", "Output format: tsv, plain, or json.")
 	retries := flag.Int("retries", 0, "Number of retries on transient errors.")
 	outputFile := flag.String("output", "", "Write results to file instead of stdout.")
 	conversation := flag.Bool("context", false, "Thread context across questions (sequential, maintains conversation state).")
@@ -231,6 +231,11 @@ func main() {
 	if *listModelsFlag {
 		listModels(*ollamaURL, time.Duration(*timeoutSecs)*time.Second)
 		return
+	}
+
+	if *stream && outputFormat(*format) != formatPlain {
+		fmt.Fprintln(os.Stderr, "error: --stream requires --format plain")
+		os.Exit(1)
 	}
 
 	var out io.Writer = os.Stdout
