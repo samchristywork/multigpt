@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -216,6 +217,36 @@ func readLines(path string) ([]string, error) {
 	return lines, scanner.Err()
 }
 
+type config struct {
+	Role        string `json:"role"`
+	Model       string `json:"model"`
+	URL         string `json:"url"`
+	TimeoutSecs int    `json:"timeout"`
+	Concurrency int    `json:"j"`
+	Format      string `json:"format"`
+	Retries     int    `json:"retries"`
+}
+
+func loadConfig() config {
+	candidates := []string{".multigpt.json"}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, ".config", "multigpt", "config.json"))
+	}
+	for _, path := range candidates {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var cfg config
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: ignoring malformed config %s: %v\n", path, err)
+			continue
+		}
+		return cfg
+	}
+	return config{}
+}
+
 func main() {
 	role := flag.String("role", "You are a helpful assistant.", "System prompt for the AI.")
 	inputFile := flag.String("input", "-", "Input file (- for stdin).")
@@ -234,6 +265,31 @@ func main() {
 	dryRun := flag.Bool("dry-run", false, "Print resolved config and questions without sending any requests.")
 
 	flag.Parse()
+
+	cfg := loadConfig()
+	explicitly := make(map[string]bool)
+	flag.Visit(func(f *flag.Flag) { explicitly[f.Name] = true })
+	if !explicitly["role"] && cfg.Role != "" {
+		*role = cfg.Role
+	}
+	if !explicitly["model"] && cfg.Model != "" {
+		*model = cfg.Model
+	}
+	if !explicitly["url"] && cfg.URL != "" {
+		*ollamaURL = cfg.URL
+	}
+	if !explicitly["timeout"] && cfg.TimeoutSecs != 0 {
+		*timeoutSecs = cfg.TimeoutSecs
+	}
+	if !explicitly["j"] && cfg.Concurrency != 0 {
+		*concurrency = cfg.Concurrency
+	}
+	if !explicitly["format"] && cfg.Format != "" {
+		*format = cfg.Format
+	}
+	if !explicitly["retries"] && cfg.Retries != 0 {
+		*retries = cfg.Retries
+	}
 
 	if *listModelsFlag {
 		listModels(*ollamaURL, time.Duration(*timeoutSecs)*time.Second)
