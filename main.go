@@ -227,6 +227,7 @@ func main() {
 	conversation := flag.Bool("context", false, "Thread context across questions (sequential, maintains conversation state).")
 	stream := flag.Bool("stream", false, "Stream tokens as they arrive (sequential, plain text only).")
 	tmplStr := flag.String("template", "", `Go template wrapping each input line, e.g. "Translate to French: {{.}}"`)
+	dryRun := flag.Bool("dry-run", false, "Print resolved config and questions without sending any requests.")
 
 	flag.Parse()
 
@@ -305,6 +306,14 @@ func main() {
 				timeout:  qTimeout,
 			})
 		}
+	}
+
+	if *dryRun {
+		fmt.Fprintln(os.Stderr, "--- dry run ---")
+		for _, q := range questions {
+			fmt.Fprintf(os.Stderr, "[%s] [timeout=%s] %s\n", q.model, q.timeout, q.question)
+		}
+		return
 	}
 
 	total := len(questions)
