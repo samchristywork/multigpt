@@ -453,12 +453,21 @@ func main() {
 
 	if *stream {
 		for i := range models {
+			var ctx []int
 			for j := 0; j < n; j++ {
 				idx := i*n + j
 				q := &questions[idx]
 				fmt.Fprintf(os.Stderr, "Q: %s\nM: %s\n", q.question, q.model)
 				fmt.Fprintf(out, "Q: %s\nM: %s\nA: ", q.question, q.model)
-				q.tokens, q.duration, q.tokensPerSec, _, q.err = askStream(*ollamaURL, q.model, *think, *role, q.question, q.timeout, nil, out)
+				var returnedCtx []int
+				q.tokens, q.duration, q.tokensPerSec, returnedCtx, q.err = askStream(*ollamaURL, q.model, *think, *role, q.question, q.timeout, ctx, out)
+				if *conversation {
+					if q.err != "" {
+						ctx = nil
+					} else {
+						ctx = returnedCtx
+					}
+				}
 				if q.err == "" {
 					fmt.Fprintf(out, "   [%d tokens, %.2fs, %.1f tok/s]\n\n", q.tokens, q.duration.Seconds(), q.tokensPerSec)
 				}
