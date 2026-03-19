@@ -217,6 +217,71 @@ func readLines(path string) ([]string, error) {
 	return lines, scanner.Err()
 }
 
+func printCompletion(shell string) {
+	switch shell {
+	case "bash":
+		fmt.Print(`_multigpt_completion() {
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    opts="--role --input --model --think --url --timeout --j --list-models --format --retries --output --context --stream --template --dry-run --completion"
+    case "${prev}" in
+        --format)   COMPREPLY=( $(compgen -W "plain tsv json" -- "${cur}") ); return ;;
+        --completion) COMPREPLY=( $(compgen -W "bash zsh fish" -- "${cur}") ); return ;;
+        --input|--output) COMPREPLY=( $(compgen -f -- "${cur}") ); return ;;
+    esac
+    COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+}
+complete -F _multigpt_completion multigpt
+`)
+	case "zsh":
+		fmt.Print(`#compdef multigpt
+_multigpt() {
+    _arguments \
+        '--role[System prompt]:role:' \
+        '--input[Input file]:file:_files' \
+        '--model[Ollama model]:model:' \
+        '--think[Enable think mode]' \
+        '--url[Ollama server URL]:url:' \
+        '--timeout[HTTP timeout in seconds]:seconds:' \
+        '-j[Max concurrent requests]:concurrency:' \
+        '--list-models[List available models and exit]' \
+        '--format[Output format]:format:(plain tsv json)' \
+        '--retries[Number of retries]:retries:' \
+        '--output[Output file]:file:_files' \
+        '--context[Thread context across questions]' \
+        '--stream[Stream tokens as they arrive]' \
+        '--template[Prompt template]:template:' \
+        '--dry-run[Print config and questions without sending requests]' \
+        '--completion[Generate shell completion script]:shell:(bash zsh fish)'
+}
+_multigpt "$@"
+`)
+	case "fish":
+		fmt.Print(`complete -c multigpt -l role       -d 'System prompt'
+complete -c multigpt -l input      -d 'Input file' -r -F
+complete -c multigpt -l model      -d 'Ollama model'
+complete -c multigpt -l think      -d 'Enable think mode'
+complete -c multigpt -l url        -d 'Ollama server URL'
+complete -c multigpt -l timeout    -d 'HTTP timeout in seconds'
+complete -c multigpt -s j          -d 'Max concurrent requests'
+complete -c multigpt -l list-models -d 'List available models and exit'
+complete -c multigpt -l format     -d 'Output format' -r -a 'plain tsv json'
+complete -c multigpt -l retries    -d 'Number of retries'
+complete -c multigpt -l output     -d 'Output file' -r -F
+complete -c multigpt -l context    -d 'Thread context across questions'
+complete -c multigpt -l stream     -d 'Stream tokens as they arrive'
+complete -c multigpt -l template   -d 'Prompt template'
+complete -c multigpt -l dry-run    -d 'Print config and questions without sending requests'
+complete -c multigpt -l completion -d 'Generate shell completion script' -r -a 'bash zsh fish'
+`)
+	default:
+		fmt.Fprintf(os.Stderr, "error: unknown shell %q (valid: bash, zsh, fish)\n", shell)
+		os.Exit(1)
+	}
+}
+
 type config struct {
 	Role        string `json:"role"`
 	Model       string `json:"model"`
@@ -263,6 +328,7 @@ func main() {
 	stream := flag.Bool("stream", false, "Stream tokens as they arrive (sequential, plain text only).")
 	tmplStr := flag.String("template", "", `Go template wrapping each input line, e.g. "Translate to French: {{.}}"`)
 	dryRun := flag.Bool("dry-run", false, "Print resolved config and questions without sending any requests.")
+	completion := flag.String("completion", "", "Print shell completion script and exit (bash, zsh, fish).")
 
 	flag.Parse()
 
@@ -289,6 +355,11 @@ func main() {
 	}
 	if !explicitly["retries"] && cfg.Retries != 0 {
 		*retries = cfg.Retries
+	}
+
+	if *completion != "" {
+		printCompletion(*completion)
+		return
 	}
 
 	if *listModelsFlag {
