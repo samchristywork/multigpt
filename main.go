@@ -608,7 +608,7 @@ func main() {
 			answer := strings.ReplaceAll(q.answer, "\n", " ")
 			fmt.Fprintf(out, "%s\t%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", q.question, q.model, answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
 		}
-		fmt.Fprintln(out, "Total tokens:", totalTokens)
+		fmt.Fprintln(os.Stderr, "Total tokens:", totalTokens)
 	default:
 		fmt.Fprintf(os.Stderr, "error: unknown format %q (valid: tsv, plain, json)\n", *format)
 		os.Exit(1)
