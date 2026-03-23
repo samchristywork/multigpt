@@ -110,7 +110,7 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 	return "", 0, 0, 0, nil, lastErr
 }
 
-func askStream(ollamaURL, model string, think bool, system, query string, timeout time.Duration, ctx []int, w io.Writer) (int, time.Duration, float64, []int, string) {
+func askStream(ollamaURL, model string, think bool, system, query string, timeout time.Duration, retries int, ctx []int, w io.Writer) (int, time.Duration, float64, []int, string) {
 	client := &http.Client{Timeout: timeout}
 	type payload struct {
 		Model   string `json:"model"`
@@ -133,35 +133,59 @@ func askStream(ollamaURL, model string, think bool, system, query string, timeou
 		return 0, 0, 0, nil, err.Error()
 	}
 
-	resp, err := client.Post(ollamaURL+"/api/generate", "application/json", bytes.NewReader(data))
-	if err != nil {
-		return 0, 0, 0, nil, err.Error()
-	}
-	defer resp.Body.Close()
+	var lastErr string
+	for attempt := 0; attempt <= retries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(1<<uint(attempt-1)) * time.Second)
+		}
 
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		var chunk ollamaResponse
-		if err := json.Unmarshal(scanner.Bytes(), &chunk); err != nil {
-			return 0, 0, 0, nil, err.Error()
+		resp, err := client.Post(ollamaURL+"/api/generate", "application/json", bytes.NewReader(data))
+		if err != nil {
+			lastErr = err.Error()
+			continue
 		}
-		if chunk.Error != "" {
-			return 0, 0, 0, nil, chunk.Error
-		}
-		fmt.Fprint(w, chunk.Response)
-		if chunk.Done {
-			fmt.Fprintln(w)
-			var tokensPerSec float64
-			if chunk.EvalDuration > 0 {
-				tokensPerSec = float64(chunk.EvalCount) / (float64(chunk.EvalDuration) / 1e9)
+
+		started := false
+		scanner := bufio.NewScanner(resp.Body)
+		var scanErr string
+		for scanner.Scan() {
+			var chunk ollamaResponse
+			if err := json.Unmarshal(scanner.Bytes(), &chunk); err != nil {
+				scanErr = err.Error()
+				break
 			}
-			return chunk.EvalCount + chunk.PromptEvalCount, time.Duration(chunk.TotalDuration), tokensPerSec, chunk.Context, ""
+			if chunk.Error != "" {
+				scanErr = chunk.Error
+				break
+			}
+			if !started && chunk.Response != "" {
+				started = true
+			}
+			fmt.Fprint(w, chunk.Response)
+			if chunk.Done {
+				fmt.Fprintln(w)
+				resp.Body.Close()
+				var tokensPerSec float64
+				if chunk.EvalDuration > 0 {
+					tokensPerSec = float64(chunk.EvalCount) / (float64(chunk.EvalDuration) / 1e9)
+				}
+				return chunk.EvalCount + chunk.PromptEvalCount, time.Duration(chunk.TotalDuration), tokensPerSec, chunk.Context, ""
+			}
 		}
+		resp.Body.Close()
+		if scanErr == "" {
+			if err := scanner.Err(); err != nil {
+				scanErr = err.Error()
+			} else {
+				scanErr = "stream ended without done message"
+			}
+		}
+		if started {
+			return 0, 0, 0, nil, scanErr
+		}
+		lastErr = scanErr
 	}
-	if err := scanner.Err(); err != nil {
-		return 0, 0, 0, nil, err.Error()
-	}
-	return 0, 0, 0, nil, "stream ended without done message"
+	return 0, 0, 0, nil, lastErr
 }
 
 func listModels(ollamaURL string, timeout time.Duration) {
@@ -460,7 +484,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "Q: %s\nM: %s\n", q.question, q.model)
 				fmt.Fprintf(out, "Q: %s\nM: %s\nA: ", q.question, q.model)
 				var returnedCtx []int
-				q.tokens, q.duration, q.tokensPerSec, returnedCtx, q.err = askStream(*ollamaURL, q.model, *think, *role, q.question, q.timeout, ctx, out)
+				q.tokens, q.duration, q.tokensPerSec, returnedCtx, q.err = askStream(*ollamaURL, q.model, *think, *role, q.question, q.timeout, *retries, ctx, out)
 				if *conversation {
 					if q.err != "" {
 						ctx = nil
