@@ -476,6 +476,7 @@ func main() {
 	n := len(lines)
 
 	if *stream {
+		hadErrors := false
 		for i := range models {
 			var ctx []int
 			for j := 0; j < n; j++ {
@@ -485,6 +486,10 @@ func main() {
 				fmt.Fprintf(out, "Q: %s\nM: %s\nA: ", q.question, q.model)
 				var returnedCtx []int
 				q.tokens, q.duration, q.tokensPerSec, returnedCtx, q.err = askStream(*ollamaURL, q.model, *think, *role, q.question, q.timeout, *retries, ctx, out)
+				if q.err != "" {
+					fmt.Fprintf(os.Stderr, "error: %s: %s\n", q.question, q.err)
+					hadErrors = true
+				}
 				if *conversation {
 					if q.err != "" {
 						ctx = nil
@@ -499,15 +504,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
 			}
 		}
-		if hadErrors := func() bool {
-			for _, q := range questions {
-				if q.err != "" {
-					fmt.Fprintf(os.Stderr, "error: %s: %s\n", q.question, q.err)
-					return true
-				}
-			}
-			return false
-		}(); hadErrors {
+		if hadErrors {
 			os.Exit(1)
 		}
 		return
