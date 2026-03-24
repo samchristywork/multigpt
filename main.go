@@ -442,14 +442,20 @@ func main() {
 	}
 
 	var out io.Writer = os.Stdout
+	var outBuf *bytes.Buffer
 	if *outputFile != "" {
-		f, err := os.Create(*outputFile)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error:", err)
-			os.Exit(1)
+		if *stream {
+			f, err := os.Create(*outputFile)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Error:", err)
+				os.Exit(1)
+			}
+			defer f.Close()
+			out = f
+		} else {
+			outBuf = &bytes.Buffer{}
+			out = outBuf
 		}
-		defer f.Close()
-		out = f
 	}
 
 	models := strings.Split(*model, ",")
@@ -648,6 +654,20 @@ func main() {
 	default:
 		fmt.Fprintf(os.Stderr, "error: unknown format %q (valid: tsv, plain, json)\n", *format)
 		os.Exit(1)
+	}
+
+	if outBuf != nil {
+		f, err := os.Create(*outputFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
+		if _, err := f.Write(outBuf.Bytes()); err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			f.Close()
+			os.Exit(1)
+		}
+		f.Close()
 	}
 
 	if hadErrors {
