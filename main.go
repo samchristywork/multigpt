@@ -401,6 +401,13 @@ func main() {
 		}
 	}
 
+	switch outputFormat(*format) {
+	case formatPlain, formatTSV, formatJSON:
+	default:
+		fmt.Fprintf(os.Stderr, "error: unknown format %q (valid: tsv, plain, json)\n", *format)
+		os.Exit(1)
+	}
+
 	if *stream && outputFormat(*format) != formatPlain {
 		fmt.Fprintln(os.Stderr, "error: --stream requires --format plain")
 		os.Exit(1)
