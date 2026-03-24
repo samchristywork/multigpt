@@ -316,24 +316,52 @@ type config struct {
 	Retries     int    `json:"retries"`
 }
 
+func mergeConfig(base, override config) config {
+	if override.Role != "" {
+		base.Role = override.Role
+	}
+	if override.Model != "" {
+		base.Model = override.Model
+	}
+	if override.URL != "" {
+		base.URL = override.URL
+	}
+	if override.TimeoutSecs != 0 {
+		base.TimeoutSecs = override.TimeoutSecs
+	}
+	if override.Concurrency != 0 {
+		base.Concurrency = override.Concurrency
+	}
+	if override.Format != "" {
+		base.Format = override.Format
+	}
+	if override.Retries != 0 {
+		base.Retries = override.Retries
+	}
+	return base
+}
+
 func loadConfig() config {
-	candidates := []string{".multigpt.json"}
+	var candidates []string
 	if home, err := os.UserHomeDir(); err == nil {
 		candidates = append(candidates, filepath.Join(home, ".config", "multigpt", "config.json"))
 	}
+	candidates = append(candidates, ".multigpt.json")
+
+	var cfg config
 	for _, path := range candidates {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
-		var cfg config
-		if err := json.Unmarshal(data, &cfg); err != nil {
+		var fileCfg config
+		if err := json.Unmarshal(data, &fileCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: ignoring malformed config %s: %v\n", path, err)
 			continue
 		}
-		return cfg
+		cfg = mergeConfig(cfg, fileCfg)
 	}
-	return config{}
+	return cfg
 }
 
 func main() {
