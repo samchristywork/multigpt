@@ -17,6 +17,8 @@ import (
 	"time"
 )
 
+var version = "dev"
+
 type outputFormat string
 
 const (
@@ -381,6 +383,7 @@ func main() {
 	tmplStr := flag.String("template", "", `Go template wrapping each input line, e.g. "Translate to French: {{.}}"`)
 	dryRun := flag.Bool("dry-run", false, "Print resolved config and questions without sending any requests.")
 	completion := flag.String("completion", "", "Print shell completion script and exit (bash, zsh, fish).")
+	versionFlag := flag.Bool("version", false, "Print version and exit.")
 
 	flag.Parse()
 
@@ -407,6 +410,11 @@ func main() {
 	}
 	if !explicitly["retries"] && cfg.Retries != 0 {
 		*retries = cfg.Retries
+	}
+
+	if *versionFlag {
+		fmt.Println("multigpt", version)
+		return
 	}
 
 	if *completion != "" {
