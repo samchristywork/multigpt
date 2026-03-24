@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -411,6 +412,48 @@ func main() {
 	}
 	if !explicitly["retries"] && cfg.Retries != 0 {
 		*retries = cfg.Retries
+	}
+
+	if !explicitly["role"] {
+		if v := os.Getenv("MULTIGPT_ROLE"); v != "" {
+			*role = v
+		}
+	}
+	if !explicitly["model"] {
+		if v := os.Getenv("MULTIGPT_MODEL"); v != "" {
+			*model = v
+		}
+	}
+	if !explicitly["url"] {
+		if v := os.Getenv("MULTIGPT_URL"); v != "" {
+			*ollamaURL = v
+		}
+	}
+	if !explicitly["timeout"] {
+		if v := os.Getenv("MULTIGPT_TIMEOUT"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				*timeoutSecs = n
+			}
+		}
+	}
+	if !explicitly["j"] {
+		if v := os.Getenv("MULTIGPT_J"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				*concurrency = n
+			}
+		}
+	}
+	if !explicitly["format"] {
+		if v := os.Getenv("MULTIGPT_FORMAT"); v != "" {
+			*format = v
+		}
+	}
+	if !explicitly["retries"] {
+		if v := os.Getenv("MULTIGPT_RETRIES"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				*retries = n
+			}
+		}
 	}
 
 	if *versionFlag {
