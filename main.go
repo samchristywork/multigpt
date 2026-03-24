@@ -384,6 +384,7 @@ func main() {
 	dryRun := flag.Bool("dry-run", false, "Print resolved config and questions without sending any requests.")
 	completion := flag.String("completion", "", "Print shell completion script and exit (bash, zsh, fish).")
 	versionFlag := flag.Bool("version", false, "Print version and exit.")
+	quiet := flag.Bool("quiet", false, "Suppress progress output on stderr (errors are still printed).")
 
 	flag.Parse()
 
@@ -471,11 +472,13 @@ func main() {
 		models[i] = strings.TrimSpace(m)
 	}
 
-	fmt.Fprintln(os.Stderr, "URL: "+*ollamaURL)
-	fmt.Fprintln(os.Stderr, "Models: "+strings.Join(models, ", "))
-	fmt.Fprintln(os.Stderr, "Role: "+*role)
-	if *inputFile != "-" {
-		fmt.Fprintln(os.Stderr, "Input file: "+*inputFile)
+	if !*quiet {
+		fmt.Fprintln(os.Stderr, "URL: "+*ollamaURL)
+		fmt.Fprintln(os.Stderr, "Models: "+strings.Join(models, ", "))
+		fmt.Fprintln(os.Stderr, "Role: "+*role)
+		if *inputFile != "-" {
+			fmt.Fprintln(os.Stderr, "Input file: "+*inputFile)
+		}
 	}
 
 	lines, err := readLines(*inputFile)
@@ -531,7 +534,9 @@ func main() {
 			for j := 0; j < n; j++ {
 				idx := i*n + j
 				q := &questions[idx]
-				fmt.Fprintf(os.Stderr, "Q: %s\nM: %s\n", q.question, q.model)
+				if !*quiet {
+					fmt.Fprintf(os.Stderr, "Q: %s\nM: %s\n", q.question, q.model)
+				}
 				fmt.Fprintf(out, "Q: %s\nM: %s\nA: ", q.question, q.model)
 				var returnedCtx []int
 				q.tokens, q.duration, q.tokensPerSec, returnedCtx, q.err = askStream(*ollamaURL, q.model, *think, *role, q.question, q.timeout, *retries, ctx, out)
@@ -550,7 +555,9 @@ func main() {
 					fmt.Fprintf(out, "   [%d tokens, %.2fs, %.1f tok/s]\n\n", q.tokens, q.duration.Seconds(), q.tokensPerSec)
 				}
 				d := atomic.AddInt64(&done, 1)
-				fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
+				if !*quiet {
+					fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
+				}
 			}
 		}
 		if hadErrors {
@@ -569,7 +576,9 @@ func main() {
 					ctx = nil
 				}
 				d := atomic.AddInt64(&done, 1)
-				fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
+				if !*quiet {
+					fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
+				}
 			}
 		}
 	} else {
@@ -593,7 +602,9 @@ func main() {
 					defer func() { <-sem }()
 					questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, _, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, *role, questions[idx].question, questions[idx].timeout, *retries, nil)
 					d := atomic.AddInt64(&done, 1)
-					fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
+					if !*quiet {
+						fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
+					}
 				}(idx)
 			}
 			wg.Wait()
@@ -658,7 +669,9 @@ func main() {
 			answer := strings.ReplaceAll(q.answer, "\n", " ")
 			fmt.Fprintf(out, "%s\t%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", question, q.model, answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
 		}
-		fmt.Fprintln(os.Stderr, "Total tokens:", totalTokens)
+		if !*quiet {
+			fmt.Fprintln(os.Stderr, "Total tokens:", totalTokens)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "error: unknown format %q (valid: tsv, plain, json)\n", *format)
 		os.Exit(1)
