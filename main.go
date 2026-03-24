@@ -491,7 +491,7 @@ func main() {
 				text = buf.String()
 			}
 			questions = append(questions, question{
-				question: strings.ReplaceAll(text, "\t", " "),
+				question: text,
 				model:    m,
 				timeout:  qTimeout,
 			})
@@ -640,8 +640,9 @@ func main() {
 		fmt.Fprintln(out, "Total tokens:", totalTokens)
 	case formatTSV:
 		for _, q := range successful {
+			question := strings.ReplaceAll(q.question, "\t", " ")
 			answer := strings.ReplaceAll(q.answer, "\n", " ")
-			fmt.Fprintf(out, "%s\t%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", q.question, q.model, answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
+			fmt.Fprintf(out, "%s\t%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", question, q.model, answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
 		}
 		fmt.Fprintln(os.Stderr, "Total tokens:", totalTokens)
 	default:
