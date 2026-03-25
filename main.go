@@ -394,6 +394,7 @@ func main() {
 	completion := flag.String("completion", "", "Print shell completion script and exit (bash, zsh, fish).")
 	versionFlag := flag.Bool("version", false, "Print version and exit.")
 	quiet := flag.Bool("quiet", false, "Suppress progress output on stderr (errors are still printed).")
+	noStats := flag.Bool("no-stats", false, "Omit per-answer token/timing stats from output.")
 
 	flag.Parse()
 
@@ -614,7 +615,11 @@ func main() {
 					}
 				}
 				if q.err == "" {
-					fmt.Fprintf(out, "   [%d tokens, %.2fs, %.1f tok/s]\n\n", q.tokens, q.duration.Seconds(), q.tokensPerSec)
+					if *noStats {
+						fmt.Fprintln(out)
+					} else {
+						fmt.Fprintf(out, "   [%d tokens, %.2fs, %.1f tok/s]\n\n", q.tokens, q.duration.Seconds(), q.tokensPerSec)
+					}
 				}
 				d := atomic.AddInt64(&done, 1)
 				if !*quiet {
@@ -722,16 +727,26 @@ func main() {
 		enc.Encode(envelope)
 	case formatPlain:
 		for _, q := range successful {
-			fmt.Fprintf(out, "Q: %s\nM: %s\nA: %s\n   [%d tokens, %.2fs, %.1f tok/s]\n\n", q.question, q.model, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
+			if *noStats {
+				fmt.Fprintf(out, "Q: %s\nM: %s\nA: %s\n\n", q.question, q.model, q.answer)
+			} else {
+				fmt.Fprintf(out, "Q: %s\nM: %s\nA: %s\n   [%d tokens, %.2fs, %.1f tok/s]\n\n", q.question, q.model, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
+			}
 		}
-		fmt.Fprintln(out, "Total tokens:", totalTokens)
+		if !*noStats {
+			fmt.Fprintln(out, "Total tokens:", totalTokens)
+		}
 	case formatTSV:
 		for _, q := range successful {
 			question := strings.ReplaceAll(q.question, "\t", " ")
 			answer := strings.ReplaceAll(q.answer, "\n", " ")
-			fmt.Fprintf(out, "%s\t%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", question, q.model, answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
+			if *noStats {
+				fmt.Fprintf(out, "%s\t%s\t%s\n", question, q.model, answer)
+			} else {
+				fmt.Fprintf(out, "%s\t%s\t%s\t[%d tokens, %.2fs, %.1f tok/s]\n", question, q.model, answer, q.tokens, q.duration.Seconds(), q.tokensPerSec)
+			}
 		}
-		if !*quiet {
+		if !*quiet && !*noStats {
 			fmt.Fprintln(os.Stderr, "Total tokens:", totalTokens)
 		}
 	default:
