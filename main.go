@@ -51,25 +51,33 @@ type ollamaResponse struct {
 	Error           string `json:"error"`
 }
 
-func ask(ollamaURL string, model string, think bool, system string, query string, timeout time.Duration, retries int, ctx []int) (string, int, time.Duration, float64, []int, string) {
+func ask(ollamaURL string, model string, think bool, system string, query string, timeout time.Duration, retries int, maxTokens int, ctx []int) (string, int, time.Duration, float64, []int, string) {
 	client := &http.Client{Timeout: timeout}
+	type options struct {
+		NumPredict int `json:"num_predict"`
+	}
 	type payload struct {
-		Model   string `json:"model"`
-		Prompt  string `json:"prompt"`
-		System  string `json:"system"`
-		Stream  bool   `json:"stream"`
-		Think   bool   `json:"think"`
-		Context []int  `json:"context,omitempty"`
+		Model   string   `json:"model"`
+		Prompt  string   `json:"prompt"`
+		System  string   `json:"system"`
+		Stream  bool     `json:"stream"`
+		Think   bool     `json:"think"`
+		Options *options `json:"options,omitempty"`
+		Context []int    `json:"context,omitempty"`
 	}
 
-	data, err := json.Marshal(payload{
+	p := payload{
 		Model:   model,
 		Prompt:  query,
 		System:  system,
 		Stream:  false,
 		Think:   think,
 		Context: ctx,
-	})
+	}
+	if maxTokens >= 0 {
+		p.Options = &options{NumPredict: maxTokens}
+	}
+	data, err := json.Marshal(p)
 	if err != nil {
 		return "", 0, 0, 0, nil, err.Error()
 	}
@@ -114,25 +122,33 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 	return "", 0, 0, 0, nil, lastErr
 }
 
-func askStream(ollamaURL, model string, think bool, system, query string, timeout time.Duration, retries int, ctx []int, w io.Writer) (int, time.Duration, float64, []int, string) {
+func askStream(ollamaURL, model string, think bool, system, query string, timeout time.Duration, retries int, maxTokens int, ctx []int, w io.Writer) (int, time.Duration, float64, []int, string) {
 	client := &http.Client{Timeout: timeout}
+	type options struct {
+		NumPredict int `json:"num_predict"`
+	}
 	type payload struct {
-		Model   string `json:"model"`
-		Prompt  string `json:"prompt"`
-		System  string `json:"system"`
-		Stream  bool   `json:"stream"`
-		Think   bool   `json:"think"`
-		Context []int  `json:"context,omitempty"`
+		Model   string   `json:"model"`
+		Prompt  string   `json:"prompt"`
+		System  string   `json:"system"`
+		Stream  bool     `json:"stream"`
+		Think   bool     `json:"think"`
+		Options *options `json:"options,omitempty"`
+		Context []int    `json:"context,omitempty"`
 	}
 
-	data, err := json.Marshal(payload{
+	p := payload{
 		Model:   model,
 		Prompt:  query,
 		System:  system,
 		Stream:  true,
 		Think:   think,
 		Context: ctx,
-	})
+	}
+	if maxTokens >= 0 {
+		p.Options = &options{NumPredict: maxTokens}
+	}
+	data, err := json.Marshal(p)
 	if err != nil {
 		return 0, 0, 0, nil, err.Error()
 	}
@@ -396,6 +412,7 @@ func main() {
 	versionFlag := flag.Bool("version", false, "Print version and exit.")
 	quiet := flag.Bool("quiet", false, "Suppress progress output on stderr (errors are still printed).")
 	noStats := flag.Bool("no-stats", false, "Omit per-answer token/timing stats from output.")
+	maxTokens := flag.Int("max-tokens", -1, "Maximum tokens to generate (-1 for server default).")
 
 	flag.Parse()
 
@@ -607,7 +624,7 @@ func main() {
 				}
 				fmt.Fprintf(out, "Q: %s\nM: %s\nA: ", q.question, q.model)
 				var returnedCtx []int
-				q.tokens, q.duration, q.tokensPerSec, returnedCtx, q.err = askStream(*ollamaURL, q.model, *think, q.role, q.question, q.timeout, *retries, ctx, out)
+				q.tokens, q.duration, q.tokensPerSec, returnedCtx, q.err = askStream(*ollamaURL, q.model, *think, q.role, q.question, q.timeout, *retries, *maxTokens, ctx, out)
 				if q.err != "" {
 					fmt.Fprintf(os.Stderr, "error: %s: %s\n", q.question, q.err)
 					hadErrors = true
@@ -643,7 +660,7 @@ func main() {
 			var ctx []int
 			for j := 0; j < n; j++ {
 				idx := i*n + j
-				questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, ctx, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, questions[idx].role, questions[idx].question, questions[idx].timeout, *retries, ctx)
+				questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, ctx, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, questions[idx].role, questions[idx].question, questions[idx].timeout, *retries, *maxTokens, ctx)
 				if questions[idx].err != "" {
 					ctx = nil
 				}
@@ -672,7 +689,7 @@ func main() {
 					defer wg.Done()
 					sem <- struct{}{}
 					defer func() { <-sem }()
-					questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, _, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, questions[idx].role, questions[idx].question, questions[idx].timeout, *retries, nil)
+					questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, _, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, questions[idx].role, questions[idx].question, questions[idx].timeout, *retries, *maxTokens, nil)
 					d := atomic.AddInt64(&done, 1)
 					if !*quiet {
 						fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
