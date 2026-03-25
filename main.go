@@ -704,12 +704,16 @@ func main() {
 	var totalDuration time.Duration
 	failures := 0
 	var successful []question
+	var failed []question
 	hadErrors := false
 	for _, q := range questions {
 		if q.err != "" {
-			fmt.Fprintf(os.Stderr, "error: %s: %s\n", q.question, q.err)
+			if outputFormat(*format) != formatJSON {
+				fmt.Fprintf(os.Stderr, "error: %s: %s\n", q.question, q.err)
+			}
 			hadErrors = true
 			failures++
+			failed = append(failed, q)
 			continue
 		}
 		totalTokens += q.tokens
@@ -727,21 +731,32 @@ func main() {
 			DurationSecs float64 `json:"duration_secs"`
 			TokensPerSec float64 `json:"tokens_per_sec"`
 		}
+		type jsonError struct {
+			Question string `json:"question"`
+			Model    string `json:"model"`
+			Error    string `json:"error"`
+		}
 		results := make([]jsonQuestion, len(successful))
 		for i, q := range successful {
 			results[i] = jsonQuestion{q.question, q.model, q.answer, q.tokens, q.duration.Seconds(), q.tokensPerSec}
 		}
+		errs := make([]jsonError, len(failed))
+		for i, q := range failed {
+			errs[i] = jsonError{q.question, q.model, q.err}
+		}
 		type jsonSummary struct {
-			TotalTokens      int     `json:"total_tokens"`
+			TotalTokens       int     `json:"total_tokens"`
 			TotalDurationSecs float64 `json:"total_duration_secs"`
-			Succeeded        int     `json:"succeeded"`
-			Failed           int     `json:"failed"`
+			Succeeded         int     `json:"succeeded"`
+			Failed            int     `json:"failed"`
 		}
 		envelope := struct {
 			Results []jsonQuestion `json:"results"`
+			Errors  []jsonError    `json:"errors,omitempty"`
 			Summary jsonSummary    `json:"summary"`
 		}{
 			Results: results,
+			Errors:  errs,
 			Summary: jsonSummary{totalTokens, totalDuration.Seconds(), len(successful), failures},
 		}
 		enc := json.NewEncoder(out)
