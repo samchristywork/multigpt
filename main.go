@@ -509,7 +509,7 @@ func main() {
 
 	var out io.Writer = os.Stdout
 	var outBuf *bytes.Buffer
-	if *outputFile != "" {
+	if *outputFile != "" && !*dryRun {
 		if *stream {
 			f, err := os.Create(*outputFile)
 			if err != nil {
@@ -574,6 +574,11 @@ func main() {
 
 	if *dryRun {
 		fmt.Fprintln(os.Stderr, "--- dry run ---")
+		fmt.Fprintf(os.Stderr, "format=%s stream=%v context=%v think=%v retries=%d concurrency=%d\n",
+			*format, *stream, *conversation, *think, *retries, *concurrency)
+		if *outputFile != "" {
+			fmt.Fprintf(os.Stderr, "output=%s\n", *outputFile)
+		}
 		for _, q := range questions {
 			fmt.Fprintf(os.Stderr, "[%s] [timeout=%s] %s\n", q.model, q.timeout, q.question)
 		}
