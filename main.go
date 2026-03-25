@@ -31,6 +31,7 @@ const (
 type question struct {
 	question     string
 	model        string
+	role         string
 	timeout      time.Duration
 	answer       string
 	tokens       int
@@ -533,7 +534,7 @@ func main() {
 	if !*quiet {
 		fmt.Fprintln(os.Stderr, "URL: "+*ollamaURL)
 		fmt.Fprintln(os.Stderr, "Models: "+strings.Join(models, ", "))
-		fmt.Fprintln(os.Stderr, "Role: "+*role)
+		fmt.Fprintln(os.Stderr, "Role: "+strings.Join(strings.Split(*role, "|"), " | "))
 		if *inputFile != "-" {
 			fmt.Fprintln(os.Stderr, "Input file: "+*inputFile)
 		}
@@ -545,9 +546,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	roles := strings.Split(*role, "|")
+
 	var questions []question
 	defaultTimeout := time.Duration(*timeoutSecs) * time.Second
-	for _, m := range models {
+	for i, m := range models {
+		modelRole := roles[min(i, len(roles)-1)]
 		for _, line := range lines {
 			text := line
 			qTimeout := defaultTimeout
@@ -568,6 +572,7 @@ func main() {
 			questions = append(questions, question{
 				question: text,
 				model:    m,
+				role:     modelRole,
 				timeout:  qTimeout,
 			})
 		}
@@ -602,7 +607,7 @@ func main() {
 				}
 				fmt.Fprintf(out, "Q: %s\nM: %s\nA: ", q.question, q.model)
 				var returnedCtx []int
-				q.tokens, q.duration, q.tokensPerSec, returnedCtx, q.err = askStream(*ollamaURL, q.model, *think, *role, q.question, q.timeout, *retries, ctx, out)
+				q.tokens, q.duration, q.tokensPerSec, returnedCtx, q.err = askStream(*ollamaURL, q.model, *think, q.role, q.question, q.timeout, *retries, ctx, out)
 				if q.err != "" {
 					fmt.Fprintf(os.Stderr, "error: %s: %s\n", q.question, q.err)
 					hadErrors = true
@@ -638,7 +643,7 @@ func main() {
 			var ctx []int
 			for j := 0; j < n; j++ {
 				idx := i*n + j
-				questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, ctx, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, *role, questions[idx].question, questions[idx].timeout, *retries, ctx)
+				questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, ctx, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, questions[idx].role, questions[idx].question, questions[idx].timeout, *retries, ctx)
 				if questions[idx].err != "" {
 					ctx = nil
 				}
@@ -667,7 +672,7 @@ func main() {
 					defer wg.Done()
 					sem <- struct{}{}
 					defer func() { <-sem }()
-					questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, _, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, *role, questions[idx].question, questions[idx].timeout, *retries, nil)
+					questions[idx].answer, questions[idx].tokens, questions[idx].duration, questions[idx].tokensPerSec, _, questions[idx].err = ask(*ollamaURL, questions[idx].model, *think, questions[idx].role, questions[idx].question, questions[idx].timeout, *retries, nil)
 					d := atomic.AddInt64(&done, 1)
 					if !*quiet {
 						fmt.Fprintf(os.Stderr, "[%d/%d done]\n", d, total)
