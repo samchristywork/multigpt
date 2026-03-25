@@ -369,21 +369,33 @@ func mergeConfig(base, override config) config {
 	return base
 }
 
-func loadConfig() config {
+func loadConfig(explicit string) config {
 	var candidates []string
-	if home, err := os.UserHomeDir(); err == nil {
-		candidates = append(candidates, filepath.Join(home, ".config", "multigpt", "config.json"))
+	if explicit != "" {
+		candidates = []string{explicit}
+	} else {
+		if home, err := os.UserHomeDir(); err == nil {
+			candidates = append(candidates, filepath.Join(home, ".config", "multigpt", "config.json"))
+		}
+		candidates = append(candidates, ".multigpt.json")
 	}
-	candidates = append(candidates, ".multigpt.json")
 
 	var cfg config
 	for _, path := range candidates {
 		data, err := os.ReadFile(path)
 		if err != nil {
+			if explicit != "" {
+				fmt.Fprintf(os.Stderr, "error: cannot read config %s: %v\n", path, err)
+				os.Exit(1)
+			}
 			continue
 		}
 		var fileCfg config
 		if err := json.Unmarshal(data, &fileCfg); err != nil {
+			if explicit != "" {
+				fmt.Fprintf(os.Stderr, "error: malformed config %s: %v\n", path, err)
+				os.Exit(1)
+			}
 			fmt.Fprintf(os.Stderr, "warning: ignoring malformed config %s: %v\n", path, err)
 			continue
 		}
@@ -413,10 +425,11 @@ func main() {
 	quiet := flag.Bool("quiet", false, "Suppress progress output on stderr (errors are still printed).")
 	noStats := flag.Bool("no-stats", false, "Omit per-answer token/timing stats from output.")
 	maxTokens := flag.Int("max-tokens", -1, "Maximum tokens to generate (-1 for server default).")
+	configFile := flag.String("config", "", "Path to config file (overrides default search paths).")
 
 	flag.Parse()
 
-	cfg := loadConfig()
+	cfg := loadConfig(*configFile)
 	explicitly := make(map[string]bool)
 	flag.Visit(func(f *flag.Flag) { explicitly[f.Name] = true })
 	if !explicitly["role"] && cfg.Role != "" {
