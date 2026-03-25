@@ -317,6 +317,8 @@ type config struct {
 	Concurrency int    `json:"j"`
 	Format      string `json:"format"`
 	Retries     int    `json:"retries"`
+	Think       *bool  `json:"think,omitempty"`
+	Stream      *bool  `json:"stream,omitempty"`
 }
 
 func mergeConfig(base, override config) config {
@@ -340,6 +342,12 @@ func mergeConfig(base, override config) config {
 	}
 	if override.Retries != 0 {
 		base.Retries = override.Retries
+	}
+	if override.Think != nil {
+		base.Think = override.Think
+	}
+	if override.Stream != nil {
+		base.Stream = override.Stream
 	}
 	return base
 }
@@ -412,6 +420,12 @@ func main() {
 	}
 	if !explicitly["retries"] && cfg.Retries != 0 {
 		*retries = cfg.Retries
+	}
+	if !explicitly["think"] && cfg.Think != nil {
+		*think = *cfg.Think
+	}
+	if !explicitly["stream"] && cfg.Stream != nil {
+		*stream = *cfg.Stream
 	}
 
 	if !explicitly["role"] {
