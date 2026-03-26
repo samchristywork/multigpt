@@ -359,7 +359,7 @@ func mergeConfig(base, override config) config {
 	return base
 }
 
-func loadConfig(explicit string) config {
+func loadConfig(explicit string) (config, error) {
 	var candidates []string
 	if explicit != "" {
 		candidates = []string{explicit}
@@ -375,23 +375,21 @@ func loadConfig(explicit string) config {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			if explicit != "" {
-				fmt.Fprintf(os.Stderr, "error: cannot read config %s: %v\n", path, err)
-				os.Exit(1)
+				return config{}, fmt.Errorf("cannot read config %s: %w", path, err)
 			}
 			continue
 		}
 		var fileCfg config
 		if err := json.Unmarshal(data, &fileCfg); err != nil {
 			if explicit != "" {
-				fmt.Fprintf(os.Stderr, "error: malformed config %s: %v\n", path, err)
-				os.Exit(1)
+				return config{}, fmt.Errorf("malformed config %s: %w", path, err)
 			}
 			fmt.Fprintf(os.Stderr, "warning: ignoring malformed config %s: %v\n", path, err)
 			continue
 		}
 		cfg = mergeConfig(cfg, fileCfg)
 	}
-	return cfg
+	return cfg, nil
 }
 
 func main() {
@@ -419,7 +417,11 @@ func main() {
 
 	flag.Parse()
 
-	cfg := loadConfig(*configFile)
+	cfg, err := loadConfig(*configFile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
 	explicitly := make(map[string]bool)
 	flag.Visit(func(f *flag.Flag) { explicitly[f.Name] = true })
 	if !explicitly["role"] && cfg.Role != "" {
