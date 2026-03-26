@@ -629,6 +629,7 @@ func main() {
 				var returnedCtx []int
 				q.tokens, q.duration, q.tokensPerSec, returnedCtx, q.err = askStream(*ollamaURL, q.model, *think, q.role, q.question, q.timeout, *retries, *maxTokens, ctx, out)
 				if q.err != "" {
+					fmt.Fprintf(out, "[error: %s]\n\n", q.err)
 					fmt.Fprintf(os.Stderr, "error: %s: %s\n", q.question, q.err)
 					hadErrors = true
 				}
