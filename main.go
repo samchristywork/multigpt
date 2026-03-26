@@ -259,11 +259,11 @@ func printCompletion(shell string) {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="--role --input --model --think --url --timeout --j --list-models --format --retries --output --context --stream --template --dry-run --completion"
+    opts="--role --input --model --think --url --timeout --j --list-models --format --retries --output --context --stream --template --dry-run --completion --version --quiet --no-stats --max-tokens --config"
     case "${prev}" in
-        --format)   COMPREPLY=( $(compgen -W "plain tsv json" -- "${cur}") ); return ;;
+        --format)     COMPREPLY=( $(compgen -W "plain tsv json" -- "${cur}") ); return ;;
         --completion) COMPREPLY=( $(compgen -W "bash zsh fish" -- "${cur}") ); return ;;
-        --input|--output) COMPREPLY=( $(compgen -f -- "${cur}") ); return ;;
+        --input|--output|--config) COMPREPLY=( $(compgen -f -- "${cur}") ); return ;;
     esac
     COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
 }
@@ -288,7 +288,12 @@ _multigpt() {
         '--stream[Stream tokens as they arrive]' \
         '--template[Prompt template]:template:' \
         '--dry-run[Print config and questions without sending requests]' \
-        '--completion[Generate shell completion script]:shell:(bash zsh fish)'
+        '--completion[Generate shell completion script]:shell:(bash zsh fish)' \
+        '--version[Print version and exit]' \
+        '--quiet[Suppress progress output on stderr]' \
+        '--no-stats[Omit per-answer token/timing stats]' \
+        '--max-tokens[Maximum tokens to generate]:tokens:' \
+        '--config[Path to config file]:file:_files'
 }
 _multigpt "$@"
 `)
@@ -309,6 +314,11 @@ complete -c multigpt -l stream     -d 'Stream tokens as they arrive'
 complete -c multigpt -l template   -d 'Prompt template'
 complete -c multigpt -l dry-run    -d 'Print config and questions without sending requests'
 complete -c multigpt -l completion -d 'Generate shell completion script' -r -a 'bash zsh fish'
+complete -c multigpt -l version    -d 'Print version and exit'
+complete -c multigpt -l quiet      -d 'Suppress progress output on stderr'
+complete -c multigpt -l no-stats   -d 'Omit per-answer token/timing stats'
+complete -c multigpt -l max-tokens -d 'Maximum tokens to generate'
+complete -c multigpt -l config     -d 'Path to config file' -r -F
 `)
 	default:
 		fmt.Fprintf(os.Stderr, "error: unknown shell %q (valid: bash, zsh, fish)\n", shell)
