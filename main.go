@@ -683,9 +683,8 @@ func main() {
 			limit = 1
 		}
 		sem := make(chan struct{}, limit)
-
+		var wg sync.WaitGroup
 		for i := range models {
-			var wg sync.WaitGroup
 			for j := 0; j < n; j++ {
 				idx := i*n + j
 				wg.Add(1)
@@ -700,8 +699,8 @@ func main() {
 					}
 				}(idx)
 			}
-			wg.Wait()
 		}
+		wg.Wait()
 	}
 
 	totalTokens := 0
