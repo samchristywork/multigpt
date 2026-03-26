@@ -407,7 +407,7 @@ func main() {
 	inputFile := flag.String("input", "-", "Input file (- for stdin).")
 	model := flag.String("model", "gemma3:4b", "Ollama model to use.")
 	think := flag.Bool("think", false, "Enable think mode.")
-	ollamaURL := flag.String("url", "http://192.168.0.15:11434", "Ollama server URL.")
+	ollamaURL := flag.String("url", "http://localhost:11434", "Ollama server URL.")
 	timeoutSecs := flag.Int("timeout", 120, "HTTP timeout in seconds per query.")
 	concurrency := flag.Int("j", 0, "Max concurrent requests (0 = unlimited).")
 	listModelsFlag := flag.Bool("list-models", false, "List available models and exit.")

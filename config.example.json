@@ -1,7 +1,7 @@
 {
   "role": "You are a helpful assistant.",
   "model": "gemma3:4b",
-  "url": "http://192.168.0.15:11434",
+  "url": "http://localhost:11434",
   "timeout": 120,
   "j": 0,
   "format": "plain",
