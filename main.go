@@ -22,6 +22,20 @@ var version = "dev"
 
 type outputFormat string
 
+type ollamaOptions struct {
+	NumPredict int `json:"num_predict"`
+}
+
+type ollamaPayload struct {
+	Model   string         `json:"model"`
+	Prompt  string         `json:"prompt"`
+	System  string         `json:"system"`
+	Stream  bool           `json:"stream"`
+	Think   bool           `json:"think"`
+	Options *ollamaOptions `json:"options,omitempty"`
+	Context []int          `json:"context,omitempty"`
+}
+
 const (
 	formatTSV   outputFormat = "tsv"
 	formatPlain outputFormat = "plain"
@@ -53,20 +67,8 @@ type ollamaResponse struct {
 
 func ask(ollamaURL string, model string, think bool, system string, query string, timeout time.Duration, retries int, maxTokens int, ctx []int) (string, int, time.Duration, float64, []int, string) {
 	client := &http.Client{Timeout: timeout}
-	type options struct {
-		NumPredict int `json:"num_predict"`
-	}
-	type payload struct {
-		Model   string   `json:"model"`
-		Prompt  string   `json:"prompt"`
-		System  string   `json:"system"`
-		Stream  bool     `json:"stream"`
-		Think   bool     `json:"think"`
-		Options *options `json:"options,omitempty"`
-		Context []int    `json:"context,omitempty"`
-	}
 
-	p := payload{
+	p := ollamaPayload{
 		Model:   model,
 		Prompt:  query,
 		System:  system,
@@ -75,7 +77,7 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 		Context: ctx,
 	}
 	if maxTokens >= 0 {
-		p.Options = &options{NumPredict: maxTokens}
+		p.Options = &ollamaOptions{NumPredict: maxTokens}
 	}
 	data, err := json.Marshal(p)
 	if err != nil {
@@ -124,20 +126,8 @@ func ask(ollamaURL string, model string, think bool, system string, query string
 
 func askStream(ollamaURL, model string, think bool, system, query string, timeout time.Duration, retries int, maxTokens int, ctx []int, w io.Writer) (int, time.Duration, float64, []int, string) {
 	client := &http.Client{Timeout: timeout}
-	type options struct {
-		NumPredict int `json:"num_predict"`
-	}
-	type payload struct {
-		Model   string   `json:"model"`
-		Prompt  string   `json:"prompt"`
-		System  string   `json:"system"`
-		Stream  bool     `json:"stream"`
-		Think   bool     `json:"think"`
-		Options *options `json:"options,omitempty"`
-		Context []int    `json:"context,omitempty"`
-	}
 
-	p := payload{
+	p := ollamaPayload{
 		Model:   model,
 		Prompt:  query,
 		System:  system,
@@ -146,7 +136,7 @@ func askStream(ollamaURL, model string, think bool, system, query string, timeou
 		Context: ctx,
 	}
 	if maxTokens >= 0 {
-		p.Options = &options{NumPredict: maxTokens}
+		p.Options = &ollamaOptions{NumPredict: maxTokens}
 	}
 	data, err := json.Marshal(p)
 	if err != nil {
@@ -561,10 +551,12 @@ func main() {
 		models[i] = strings.TrimSpace(m)
 	}
 
+	roles := strings.Split(*role, "|")
+
 	if !*quiet {
 		fmt.Fprintln(os.Stderr, "URL: "+*ollamaURL)
 		fmt.Fprintln(os.Stderr, "Models: "+strings.Join(models, ", "))
-		fmt.Fprintln(os.Stderr, "Role: "+strings.Join(strings.Split(*role, "|"), " | "))
+		fmt.Fprintln(os.Stderr, "Role: "+strings.Join(roles, " | "))
 		if *inputFile != "-" {
 			fmt.Fprintln(os.Stderr, "Input file: "+*inputFile)
 		}
@@ -575,8 +567,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
-
-	roles := strings.Split(*role, "|")
 
 	var questions []question
 	defaultTimeout := time.Duration(*timeoutSecs) * time.Second
