@@ -104,6 +104,11 @@ multigpt --context --stream --input conversation.txt
 
 ## Dependencies
 
+```
+go 1.21+
+ollama (running locally or on a reachable host)
+```
+
 ## License
 
 This work is licensed under the GNU General Public License version 3 (GPLv3).
