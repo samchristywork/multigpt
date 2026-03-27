@@ -30,6 +30,30 @@ construction.
 
 ## Usage
 
+```
+Usage: multigpt [flags]
+  --config        Path to config file (overrides default search paths)
+  --context       Thread context across questions (sequential)
+  --dry-run       Print resolved config and questions without sending requests
+  --format        Output format: plain, tsv, or json (default: plain)
+  -j              Max concurrent requests (0 = unlimited)
+  --list-models   List available models and exit
+  --max-tokens    Maximum tokens to generate (-1 for server default)
+  --model         Ollama model to use (comma-separated for multiple)
+  --no-stats      Omit per-answer token/timing stats from output
+  --output        Write results to file instead of stdout
+  --quiet         Suppress progress output on stderr
+  --retries       Number of retries on transient errors
+  --role          System prompt (use | to assign different roles per model)
+  --stream        Stream tokens as they arrive (plain format only)
+  --template      Go template wrapping each input line
+  --think         Enable think mode
+  --timeout       HTTP timeout in seconds per query (default: 120)
+  --url           Ollama server URL (default: http://localhost:11434)
+  --version       Print version and exit
+  --completion    Print shell completion script (bash, zsh, fish)
+```
+
 ## Configuration
 
 ## Examples
