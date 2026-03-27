@@ -56,6 +56,26 @@ Usage: multigpt [flags]
 
 ## Configuration
 
+MultiGPT loads configuration from `~/.config/multigpt/config.json` and
+`.multigpt.json` in the current directory, with later sources taking precedence
+over earlier ones. Flags always override config files.
+
+```json
+{
+  "role": "You are a helpful assistant.",
+  "model": "gemma3:4b",
+  "url": "http://localhost:11434",
+  "timeout": 120,
+  "j": 0,
+  "format": "plain",
+  "retries": 0
+}
+```
+
+The following environment variables are also supported and override config file
+values: `MULTIGPT_ROLE`, `MULTIGPT_MODEL`, `MULTIGPT_URL`, `MULTIGPT_TIMEOUT`,
+`MULTIGPT_J`, `MULTIGPT_FORMAT`, `MULTIGPT_RETRIES`.
+
 ## Examples
 
 ## Dependencies
