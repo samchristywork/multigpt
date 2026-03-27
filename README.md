@@ -78,6 +78,30 @@ values: `MULTIGPT_ROLE`, `MULTIGPT_MODEL`, `MULTIGPT_URL`, `MULTIGPT_TIMEOUT`,
 
 ## Examples
 
+Query a single model:
+
+```sh
+echo "What is the capital of France?" | multigpt
+```
+
+Compare two models on the same questions:
+
+```sh
+multigpt --model gemma3:4b,llama3:8b --input questions.txt
+```
+
+Use a prompt template and output JSON:
+
+```sh
+multigpt --template "Translate to Spanish: {{.}}" --format json --input words.txt
+```
+
+Maintain a conversation across sequential questions:
+
+```sh
+multigpt --context --stream --input conversation.txt
+```
+
 ## Dependencies
 
 ## License
