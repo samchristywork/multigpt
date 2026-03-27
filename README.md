@@ -15,6 +15,19 @@ construction.
 
 ## Features
 
+- Send questions to one or more Ollama models in a single invocation
+- Concurrent execution with configurable parallelism limit
+- Multiple output formats: plain text, TSV, and JSON
+- Streaming mode that prints tokens as they arrive
+- Conversation context threading across sequential questions
+- Go template support for constructing prompts from input lines
+- Per-question timeout overrides using a `<duration>: <question>` prefix
+- Think mode for reasoning-capable models
+- Retry with exponential backoff on transient errors
+- Config file with layered precedence (file -> env -> flags)
+- Shell completion scripts for bash, zsh, and fish
+- Dry-run mode to preview resolved config and questions
+
 ## Usage
 
 ## Configuration
